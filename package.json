@@ -1,0 +1,89 @@
+{
+	"name": "@svar-ui/vue-gantt",
+	"version": "2.6.0",
+	"description": "SVAR Vue Gantt library",
+	"productTag": "gantt",
+	"type": "module",
+	"license": "MIT",
+	"scripts": {
+		"dev": "vite",
+		"build": "vite build",
+		"build:demo": "BUILD_DEMOS=true vite build",
+		"build:full-css": "BUILD_FULL_CSS=true vite build",
+		"lint": "eslint . --report-unused-disable-directives",
+		"preview": "vite preview",
+		"prepare": "husky",
+		"prettier": "prettier --write ./src/ ./demos/"
+	},
+	"exports": {
+		".": {
+			"types": "./types/index.d.ts",
+			"import": "./dist/index.es.js",
+			"require": "./dist/index.cjs",
+			"default": "./dist/index.es.js"
+		},
+		"./style.css": "./dist/index.css",
+		"./all.css": "./dist-full/index.css"
+	},
+	"types": "./types/index.d.ts",
+	"main": "./dist/index.cjs",
+	"module": "./dist/index.es.js",
+	"files": [
+		"dist",
+		"types",
+		"package.json",
+		"dist-full/index.css"
+	],
+	"dependencies": {
+		"@svar-ui/core-locales": "2.5.0",
+		"@svar-ui/gantt-locales": "2.6.0",
+		"@svar-ui/gantt-store": "2.6.0",
+		"@svar-ui/grid-store": "2.6.0",
+		"@svar-ui/lib-dom": "0.12.1",
+		"@svar-ui/lib-state": "1.9.6",
+		"@svar-ui/lib-vue": "1.1.0",
+		"@svar-ui/vue-core": "2.5.0",
+		"@svar-ui/vue-editor": "2.5.0",
+		"@svar-ui/vue-grid": "2.6.0",
+		"@svar-ui/vue-menu": "2.5.0",
+		"@svar-ui/vue-toolbar": "2.5.0"
+	},
+	"peerDependencies": {
+		"vue": "^3.0.0"
+	},
+	"devDependencies": {
+		"@svar-ui/gantt-data-provider": "2.6.0",
+		"@svar-ui/vue-comments": "2.5.0",
+		"@svar-ui/vue-filter": "2.5.0",
+		"@svar-ui/vue-tasklist": "2.5.0",
+		"@vitejs/plugin-vue": "^6.0.1",
+		"eslint": "^9.35.0",
+		"eslint-plugin-vue": "^10.5.1",
+		"globals": "^16.5.0",
+		"husky": "9.1.6",
+		"lint-staged": "15.2.10",
+		"prettier": "3.3.3",
+		"vite": "^7.2.2",
+		"vue-router": "^4.6.3"
+	},
+	"homepage": "https://svar.dev/vue/gantt/",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/svar-widgets/vue-gantt.git"
+	},
+	"bugs": {
+		"url": "https://forum.svar.dev"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"lint-staged": {
+		"*.{ts,js,vue}": [
+			"eslint --fix",
+			"prettier --write"
+		],
+		"*.{css,md,json}": [
+			"prettier --write"
+		]
+	}
+}
