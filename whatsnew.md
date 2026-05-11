@@ -1,3 +1,10 @@
+## 2.6.1
+
+### Fixes
+
+- Incorrect license info
+- Error in MIT package
+
 ## 2.6.0
 
 ### Initial features

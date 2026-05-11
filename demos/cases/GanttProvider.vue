@@ -4,7 +4,7 @@ import { RestDataProvider } from "@svar-ui/gantt-data-provider";
 import { Gantt, ContextMenu, Editor } from "../../src";
 
 const restProvider = new RestDataProvider(
-	"https://master--svar-gantt-go--dev.webix.io"
+	"https://gantt-backend.svar.dev"
 );
 const api = ref(null);
 const tasks = ref(undefined);

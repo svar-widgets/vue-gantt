@@ -2,7 +2,7 @@
 import { ref } from "vue";
 import { Gantt, ContextMenu, Editor } from "../../src";
 
-const server = "https://master--svar-gantt-go--dev.webix.io";
+const server = "https://gantt-backend.svar.dev";
 
 const api = ref(null);
 const tasks = ref([]);

@@ -6,14 +6,14 @@ import Willow from "../src/themes/Willow.vue";
 import WillowDark from "../src/themes/WillowDark.vue";
 
 import { Button, Segmented, Globals, Locale } from "@svar-ui/vue-core";
-import "@wx/vue-core/style.css";
-import "@wx/vue-menu/style.css";
-import "@wx/vue-toolbar/style.css";
-import "@wx/vue-editor/style.css";
-import "@wx/vue-comments/style.css";
-import "@wx/vue-tasklist/style.css";
-import "@wx/vue-filter/style.css";
-import "@wx/vue-grid/style.css";
+import "@svar-ui/vue-core/style.css";
+import "@svar-ui/vue-menu/style.css";
+import "@svar-ui/vue-toolbar/style.css";
+import "@svar-ui/vue-editor/style.css";
+import "@svar-ui/vue-comments/style.css";
+import "@svar-ui/vue-tasklist/style.css";
+import "@svar-ui/vue-filter/style.css";
+import "@svar-ui/vue-grid/style.css";
 
 const app = createApp(Index, {
 	publicName: "Gantt",

@@ -1,8 +1,9 @@
 {
 	"name": "@svar-ui/vue-gantt",
-	"version": "2.6.0",
+	"version": "2.6.1",
 	"description": "SVAR Vue Gantt library",
 	"productTag": "gantt",
+	"productTrial": true,
 	"type": "module",
 	"license": "MIT",
 	"scripts": {
@@ -36,8 +37,8 @@
 	],
 	"dependencies": {
 		"@svar-ui/core-locales": "2.5.0",
-		"@svar-ui/gantt-locales": "2.6.0",
-		"@svar-ui/gantt-store": "2.6.0",
+		"@svar-ui/gantt-locales": "2.6.1",
+		"@svar-ui/gantt-store": "2.6.1",
 		"@svar-ui/grid-store": "2.6.0",
 		"@svar-ui/lib-dom": "0.12.1",
 		"@svar-ui/lib-state": "1.9.6",
