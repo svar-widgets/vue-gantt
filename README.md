@@ -20,7 +20,7 @@
 
 [SVAR Vue Gantt](https://svar.dev/vue/gantt/) is a customizable, interactive Gantt chart component for Vue 3 designed for visualizing project timelines. The component provides an intuitive interface for managing tasks and dependencies directly on the timeline via drag-and-drop or a customizable task edit form. Comes with full TypeScript support, developer-friendly API, and flexible CSS styling.
 
-The library provides a lightweight, MIT-licensed core for building Gantt charts with essentical project scheduling functionality. For more advanced use cases, the PRO edition adds scheduling logic such as auto-scheduling, working time calendars, critical path analysis, baselines, and other features required for complex project planning.
+The library provides a lightweight, MIT-licensed core for building Gantt charts with essential project scheduling functionality. For more advanced use cases, the PRO edition adds scheduling logic such as auto-scheduling, working time calendars, critical path analysis, baselines, and other features required for complex project planning.
 
 <div align="center">
 <img src="https://svar.dev/images/github/basic-gantt-react.gif" alt="SVAR Vue Gantt Chart UI">
@@ -34,10 +34,10 @@ The library provides a lightweight, MIT-licensed core for building Gantt charts 
 -   Customizable grid, task bars, and UI via CSS
 -   Sorting and filtering (including natural language search)
 -   Built-in tooltips, context menu, and toolbar
--   Smooth performance with large datasets
 -   Zooming with scroll
 -   Hotkeys support for common actions
--   Light and dark skins
+-   High performance with virtual rendering for large datasets
+-   Light and dark themes
 -   Full TypeScript support
 
 ### :rocket: PRO Edition
@@ -45,9 +45,10 @@ The library provides a lightweight, MIT-licensed core for building Gantt charts 
 SVAR Vue Gantt is available in open-source and [PRO Editions](https://svar.dev/vue/gantt/#pro). The PRO Edition offers additional features and automation logic:
 
 -   Scheduling logic → auto-scheduling, critical path, slack, summary tasks automation
+-   Resource management → resource assignment, workload visualization
 -   Planning tools → baselines, markers
--   Calendar control → working time calendar
--   Advanced structure → rollups, split tasks, unscheduled tasks
+-   Calendar control → working-time calendar, individual calendars for tasks and resources
+-   Advanced structure → rollups, split tasks, unscheduled tasks, WBS codes support
 -   Workflow features → undo/redo
 -   Data Export → PDF, PNG, Excel, MS Project import/export
 
@@ -63,11 +64,12 @@ To install SVAR Vue Gantt:
 npm install @svar-ui/vue-gantt
 ```
 
-To use the widget, simply import the package and include the component in your Vue file:
+To use the Gantt chart, simply import the package and include the component in your Vue file:
 
 ```vue
 <script setup>
 import { Gantt } from "@svar-ui/vue-gantt";
+import "@svar-ui/vue-gantt/all.css";
 
 const tasks = [
     {

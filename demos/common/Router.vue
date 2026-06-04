@@ -43,7 +43,7 @@ function onRouteChange(path) {
 	const newSkin = parts[2];
 
 	const tPage = `/${page}/:skin`;
-	const matched = links.find((a) => a[0] === tPage);
+	const matched = links.find((a) => Array.isArray(a) && a[0] === tPage);
 	const title = matched?.[1] ?? "";
 	const filename = matched?.[3] ?? "";
 	const link = `${baseLink}${filename.replace(/\s+/g, "")}.vue`;

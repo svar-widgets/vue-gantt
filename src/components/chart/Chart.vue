@@ -9,8 +9,7 @@ import TimeScales from './TimeScale.vue';
 
 import { hotkeys } from '@svar-ui/grid-store';
 import { setID } from '@svar-ui/lib-dom';
-import { asDirective } from '@svar-ui/lib-vue';
-import { subscribe } from '@svar-ui/lib-vue';
+import { asDirective, subscribe } from '@svar-ui/lib-vue';
 
 const vHotkeys = asDirective(hotkeys);
 
@@ -19,8 +18,6 @@ const props = defineProps({
 	fullWidth: {},
 	fullHeight: {},
 	taskTemplate: {},
-	cellBorders: {},
-	highlightTime: {},
 });
 
 const api = inject('gantt-store');
@@ -30,9 +27,16 @@ const {
 	scrollTop: rScrollTop,
 	scrollLeft: rScrollLeft,
 	cellHeight,
+	_tasks: rTasks,
+	resources,
 	_scales: scales,
+	area,
+	groupBy,
+	xArea,
 	zoom,
+	_calendars,
 	_markers,
+	highlightTime,
 } = api.getReactiveState();
 
 const $selected = subscribe(selected, true);
@@ -42,6 +46,13 @@ const $cellHeight = subscribe(cellHeight);
 const $scales = subscribe(scales);
 const $zoom = subscribe(zoom);
 const $_markers = subscribe(_markers);
+const $rTasks = subscribe(rTasks);
+const $resources = subscribe(resources);
+const $area = subscribe(area);
+const $groupBy = subscribe(groupBy);
+const $xArea = subscribe(xArea);
+const $_calendars = subscribe(_calendars);
+const $highlightTime = subscribe(highlightTime);
 
 const chartHeight = ref(0);
 const chart = ref(null);
@@ -58,7 +69,7 @@ const selectStyle = computed(() => {
 	return t;
 });
 
-watch(chartHeight, () => {
+watch([$rScrollTop, chartHeight, $cellHeight], () => {
 	dataRequest();
 });
 
@@ -72,21 +83,14 @@ watchEffect(() => {
 });
 
 function onScroll() {
-	setScroll();
-	dataRequest();
-}
-
-function setScroll() {
-	const ev = {};
-	if (chart.value.scrollTop !== $rScrollTop.value) ev.top = chart.value.scrollTop;
-	if (chart.value.scrollLeft !== $rScrollLeft.value) ev.left = chart.value.scrollLeft;
-	api.exec('scroll-chart', ev);
+	if (chart.value.scrollLeft !== $rScrollLeft.value)
+		api.exec('scroll-chart', { left: chart.value.scrollLeft });
 }
 
 function dataRequest() {
 	const clientHeight = chartHeight.value || 0;
 	const num = Math.ceil(clientHeight / $cellHeight.value) + 1;
-	const pos = Math.floor((chart.value?.scrollTop || 0) / $cellHeight.value);
+	const pos = Math.floor(($rScrollTop.value || 0) / $cellHeight.value);
 	const start = Math.max(0, pos - extraRows);
 	const end = pos + num + extraRows;
 	const from = start * $cellHeight.value;
@@ -136,7 +140,7 @@ function onWheel(e) {
 }
 
 function getHoliday(cell) {
-	const style = props.highlightTime(cell.date, cell.unit);
+	const style = $highlightTime.value?.(cell.date, cell.unit);
 	if (style)
 		return {
 			css: style,
@@ -146,10 +150,88 @@ function getHoliday(cell) {
 }
 
 const holidays = computed(() => {
-	return ($scales.value.minUnit === 'hour' || $scales.value.minUnit === 'day') &&
-		props.highlightTime
-		? $scales.value.rows[$scales.value.rows.length - 1].cells.map(getHoliday)
-		: null;
+	if (
+		($scales.value.minUnit !== 'hour' && $scales.value.minUnit !== 'day') ||
+		!$highlightTime.value
+	)
+		return null;
+	const cells = $scales.value.rows[$scales.value.rows.length - 1].cells;
+	return cells.slice($xArea.value.start, $xArea.value.end).map(getHoliday);
+});
+
+const timelineCells = computed(() => {
+	const row = $scales.value.rows[$scales.value.rows.length - 1];
+	const cells = row?.cells;
+	return ($scales.value.minUnit === 'hour' || $scales.value.minUnit === 'day') && cells
+		? cells.slice($xArea.value.start, $xArea.value.end)
+		: [];
+});
+
+const visibleTasks = computed(() => $rTasks.value.slice($area.value.start, $area.value.end));
+
+function getRowCalendars(task) {
+	if ($groupBy.value?.field === 'resource') {
+		if (task.$resource) {
+			const calendar = api.getResourceCalendar(task);
+			return calendar ? [calendar] : [];
+		}
+
+		const groupValue = task.$groupValue;
+		if (groupValue === undefined || groupValue === '$ungrouped')
+			return [];
+
+		const resourceIds = Array.isArray(groupValue)
+			? groupValue
+			: [groupValue];
+
+		return resourceIds.flatMap(id => {
+			const resource = $resources.value?.byId(id);
+			if (!resource) return [];
+			const calendar = api.getResourceCalendar(resource);
+			return calendar ? [calendar] : [];
+		});
+	}
+
+	const calendar = task.calendar ? api.getTaskCalendar(task) : undefined;
+	return calendar ? [calendar] : [];
+}
+
+const rowHighlights = computed(() => {
+	const result = [];
+	if (!$_calendars.value) return result;
+	const globalCalendar = api.getCalendar();
+	visibleTasks.value.forEach((task, index) => {
+		const rowCalendars = getRowCalendars(task);
+		if (!rowCalendars.length) return;
+		timelineCells.value.forEach((cell, cellIndex) => {
+			const nonWorkingCalendars = rowCalendars.filter(
+				cal => !cal.isWorkingDay(cell.date)
+			);
+			const isRowWorkingDay = nonWorkingCalendars.length === 0;
+			const isGlobalHoliday =
+				globalCalendar && !globalCalendar.isWorkingDay(cell.date);
+
+			const cellConfig = {
+				width: cell.width,
+				height: $cellHeight.value,
+				left: (cellIndex + $xArea.value.start) * cell.width,
+				top: $area.value.from + index * $cellHeight.value,
+			};
+
+			let css = '';
+			if (!isRowWorkingDay) {
+				const extra = nonWorkingCalendars
+					.map(cal => cal.css)
+					.filter(Boolean);
+				css = ['wx-weekend', ...extra].join(' ');
+			}
+			if (isRowWorkingDay && isGlobalHoliday)
+				css = 'wx-weekend-override';
+
+			if (css) result.push({ ...cellConfig, css });
+		});
+	});
+	return result;
 });
 
 function handleHotkey(ev) {
@@ -190,7 +272,7 @@ onUnmounted(() => {
 			exec: v => handleHotkey(v),
 		}"
 	>
-		<TimeScales :highlightTime="props.highlightTime" />
+		<TimeScales :api="api" />
 		<div v-if="$_markers.length" class="wx-markers" :style="`height:${chartGridHeight}px;`">
 			<div
 				v-for="marker in $_markers"
@@ -208,12 +290,17 @@ onUnmounted(() => {
 					<div
 						v-if="holiday"
 						:class="holiday.css"
-						:style="`width: ${holiday.width}px; left:${i * holiday.width}px`"
+						:style="`width: ${holiday.width}px; left:${$xArea.from + i * holiday.width}px`"
 					></div>
 				</template>
 			</div>
 
-			<CellGrid :borders="props.cellBorders" />
+			<div
+				v-for="(row, index) in rowHighlights"
+				:key="index"
+				:class="row.css"
+				:style="`position: absolute; pointer-events: none; width:${row.width}px; height:${row.height}px; left:${row.left}px; top:${row.top}px`"
+			></div>
 
 			<template v-if="$selected.length">
 				<template v-for="(obj, index) in $selected" :key="obj.id">
@@ -225,6 +312,8 @@ onUnmounted(() => {
 					></div>
 				</template>
 			</template>
+
+			<CellGrid />
 
 			<Bars :readonly="props.readonly" :taskTemplate="props.taskTemplate" />
 		</div>
@@ -296,5 +385,9 @@ onUnmounted(() => {
 	background: var(--wx-gantt-holiday-background);
 	color: var(--wx-gantt-holiday-color);
 	position: absolute;
+}
+
+.wx-weekend-override {
+	background: var(--wx-background);
 }
 </style>

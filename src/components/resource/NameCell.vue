@@ -1,5 +1,7 @@
 <script setup>
-import GroupCellText from "./GroupCellText.vue";
+defineOptions({ name: "GanttResourceNameCell" });
+
+import { Avatar } from "@svar-ui/vue-core";
 
 const props = defineProps({
 	row: {},
@@ -14,28 +16,26 @@ function getStyle(row, col) {
 </script>
 
 <template>
-	<div class="wx-content" :style="getStyle(row, column)">
-		<template v-if="!row.$empty && (row.data?.length || row.lazy)">
+	<div class="wx-content" :style="getStyle(props.row, props.column)">
+		<template v-if="props.row.data">
 			<i
-				:class="
-					'wx-toggle-icon wxi-menu-' +
-					(row.open ? 'down' : 'right')
-				"
-				data-action="open-task"
+				:class="`wx-toggle-icon wxi-menu-${props.row.open ? 'down' : 'right'}`"
+				data-action="open-resource-row"
 			></i>
 		</template>
 		<i v-else class="wx-toggle-placeholder"></i>
-		<div class="wx-text">
+		<div class="wx-name">
 			<component
-				v-if="column._cell"
-				:is="column._cell"
-				:row="row"
-				:column="column"
+				v-if="props.column._cell"
+				:is="props.column._cell"
+				:row="props.row"
+				:column="props.column"
 			/>
-			<GroupCellText v-else-if="row.$group" :row="row" />
-			<template v-else>
-				{{ row.text }}
-			</template>
+			<div v-else-if="props.row.role" class="wx-avatar-name">
+				<Avatar :value="props.row" :size="28" />
+				<span>{{ props.row.name }}</span>
+			</div>
+			<template v-else>{{ props.row.name }}</template>
 		</div>
 	</div>
 </template>
@@ -67,9 +67,19 @@ function getStyle(row, col) {
 	flex: 0 0 var(--wx-icon-size);
 }
 
-.wx-text {
+.wx-name,
+.wx-avatar-name span {
 	text-overflow: ellipsis;
 	overflow: hidden;
 	white-space: nowrap;
+}
+
+.wx-avatar-name {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	& :deep(.wx-avatar-root) {
+		flex: 0 0 auto;
+	}
 }
 </style>

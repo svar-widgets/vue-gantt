@@ -22,7 +22,7 @@ const columns = [
 		width: 90,
 		align: "center",
 	},
-	{ id: "add-task", header: "Add task", width: 50, align: "center" },
+	{ id: "add-task", header: "Add task", width: 37, align: "center" },
 ];
 </script>
 

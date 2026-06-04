@@ -18,19 +18,15 @@ import Grid from "./grid/Grid.vue";
 import Chart from "./chart/Chart.vue";
 import Resizer from "./Resizer.vue";
 
-// helpers
-import { useModeObserver } from "../helpers/modeResizeObserver";
-
 const vHotkeys = asDirective(hotkeys);
 
 const props = defineProps({
 	taskTemplate: {},
 	readonly: {},
-	cellBorders: {},
-	highlightTime: {},
 });
 
 const tableAPI = defineModel("tableAPI");
+const ganttWidth = defineModel("ganttWidth");
 
 const api = inject("gantt-store");
 
@@ -41,6 +37,8 @@ const {
 	columns: rColumns,
 	scrollTop: rScrollTop,
 	undo,
+	gridWidth,
+	_columnsWidth,
 } = api.getReactiveState();
 
 const $rTasks = subscribe(rTasks);
@@ -49,59 +47,12 @@ const $rCellHeight = subscribe(rCellHeight);
 const $rColumns = subscribe(rColumns);
 const $rScrollTop = subscribe(rScrollTop);
 const $undo = subscribe(undo);
+const $gridWidth = subscribe(gridWidth);
+const $_columnsWidth = subscribe(_columnsWidth);
 
-// resize
-const compactMode = ref(false);
-const gridWidth = ref(0);
-const ganttWidth = ref(undefined);
 const ganttHeight = ref(undefined);
 const innerWidth = ref(undefined);
 const chart = ref(null);
-const display = ref("all"); // all, grid, chart
-
-watchEffect(() => {
-	const ro = useModeObserver(handleResize);
-	ro.observe();
-
-	onWatcherCleanup(() => {
-		ro.disconnect();
-	});
-});
-
-let lastDisplay = null;
-
-function handleResize(mode) {
-	if (mode !== compactMode.value) {
-		compactMode.value = mode;
-		if (compactMode.value) {
-			lastDisplay = display.value;
-			if (display.value === "all") display.value = "grid";
-		} else if (!lastDisplay || lastDisplay === "all") display.value = "all";
-	}
-}
-
-const gridColumnWidth = computed(() => {
-	let w;
-
-	if ($rColumns.value.every(c => c.width && !c.flexgrow)) {
-		w = $rColumns.value.reduce((acc, c) => acc + parseInt(c.width), 0);
-	} else {
-		if (display.value === "chart") {
-			w =
-				parseInt(
-					$rColumns.value.find(c => c.id === "action")?.width
-				) || 50;
-		} else {
-			w = 440;
-		}
-	}
-
-	return w;
-});
-
-watchEffect(() => {
-	gridWidth.value = gridColumnWidth.value;
-});
 
 const scrollSize = computed(() => ganttWidth.value - innerWidth.value);
 const fullWidth = computed(() => $rScales.value.width);
@@ -124,7 +75,7 @@ watchEffect(() => {
 
 function chartResizeHandler() {
 	api.exec("resize-chart", {
-		width: ganttWidth.value - gridWidth.value,
+		width: ganttWidth.value - $gridWidth.value - scrollSize.value - 4, // resizer width
 		height: ganttHeight.value - $rScales.value.height,
 		scrollSize: scrollSize.value,
 	});
@@ -219,19 +170,14 @@ onUnmounted(() => {
 				>
 					<template v-if="$rColumns.length">
 						<Grid
-							v-model:display="display"
-							:compactMode="compactMode"
-							:columnWidth="gridColumnWidth"
-							:width="gridWidth"
+							:columnWidth="$_columnsWidth"
 							:readonly="readonly"
 							:fullHeight="fullHeight"
 							v-model:tableAPI="tableAPI"
 						/>
 						<Resizer
-							v-model:value="gridWidth"
-							v-model:display="display"
-							:compactMode="compactMode"
 							:containerWidth="ganttWidth"
+							:api="api"
 						/>
 					</template>
 
@@ -241,8 +187,6 @@ onUnmounted(() => {
 							:fullWidth="fullWidth"
 							:fullHeight="fullHeight"
 							:taskTemplate="taskTemplate"
-							:cellBorders="cellBorders"
-							:highlightTime="highlightTime"
 						/>
 					</div>
 				</div>

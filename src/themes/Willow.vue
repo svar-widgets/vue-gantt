@@ -2,6 +2,7 @@
 defineOptions({ name: "GanttThemesWillow" });
 
 import { Willow } from "@svar-ui/vue-core";
+import { Willow as GridWillow } from "@svar-ui/vue-grid";
 
 const props = defineProps({
 	fonts: { type: Boolean, default: true },
@@ -9,10 +10,13 @@ const props = defineProps({
 </script>
 
 <template>
-    <Willow v-if="$slots.default" :fonts="props.fonts">
-		<slot />
+	<Willow v-if="$slots.default" :fonts="props.fonts">
+		<GridWillow><slot /></GridWillow>
 	</Willow>
-	<Willow v-else :fonts="props.fonts" />
+	<template v-else>
+		<GridWillow />
+		<Willow :fonts="props.fonts" />
+	</template>
 </template>
 
 <style scoped>
@@ -95,13 +99,11 @@ const props = defineProps({
 	--wx-gantt-marker-font-color: #fff;
 	--wx-gantt-marker-color: rgba(6, 189, 248, 0.77);
 
-	/* tooltips */
-	--wx-tooltip-font: var(--wx-font-weight) var(--wx-font-size)
-		var(--wx-font-family);
-	--wx-tooltip-font-color: #e6e6e6;
-	--wx-tooltip-background: #4f525a;
-
 	/* sidebar */
 	--wx-sidebar-close-icon: #c0c3ce;
+
+	/* resources */
+	--wx-gantt-load-normal-color: #f2fbf9;
+	--wx-gantt-load-danger-color: #fdf5f5;
 }
 </style>

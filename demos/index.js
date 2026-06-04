@@ -14,6 +14,7 @@ import "@svar-ui/vue-comments/style.css";
 import "@svar-ui/vue-tasklist/style.css";
 import "@svar-ui/vue-filter/style.css";
 import "@svar-ui/vue-grid/style.css";
+import "@svar-ui/vue-excel-import/style.css";
 
 const app = createApp(Index, {
 	publicName: "Gantt",

@@ -1,7 +1,7 @@
 <script setup>
 defineOptions({ name: "GanttComponentsGantt" });
 
-import { ref, computed, watch, watchEffect, provide, inject, useAttrs } from "vue";
+import { ref, computed, watchEffect, provide, inject, useAttrs } from "vue";
 import { writable } from "@svar-ui/lib-vue";
 
 // locales
@@ -13,11 +13,9 @@ import { en as coreEn } from "@svar-ui/core-locales";
 import { EventBusRouter } from "@svar-ui/lib-state";
 import {
 	DataStore,
-	defaultColumns,
+	getDefaultColumns,
 	defaultTaskTypes,
-	parseTaskDates,
 	normalizeZoom,
-	normalizeLinks,
 } from "@svar-ui/gantt-store";
 
 // views
@@ -39,13 +37,15 @@ const props = defineProps({
 	selected: { default: () => [] },
 	activeTask: { default: null },
 	links: { default: () => [] },
+	resources: { default: null },
+	assignments: { default: () => [] },
 	scales: {
 		default: () => [
 			{ unit: "month", step: 1, format: "%F %Y" },
 			{ unit: "day", step: 1, format: "%j" },
 		],
 	},
-	columns: { default: () => defaultColumns },
+	columns: { default: null },
 	start: { default: null },
 	end: { default: null },
 	lengthUnit: { default: "day" },
@@ -53,6 +53,8 @@ const props = defineProps({
 	cellWidth: { default: 100 },
 	cellHeight: { default: 38 },
 	scaleHeight: { default: 36 },
+	gridWidth: { default: 440 },
+	displayMode: { default: "all" },
 	readonly: { type: Boolean, default: false },
 	cellBorders: { default: "full" },
 	zoom: { type: [Boolean, Object, Array], default: false },
@@ -67,11 +69,13 @@ const props = defineProps({
 	projectStart: { default: null },
 	projectEnd: { default: null },
 	calendar: { default: null },
+	calendars: { default: () => [] },
 	undo: { type: Boolean, default: false },
 	splitTasks: { type: Boolean, default: false },
 	summary: { default: null },
 	slack: { type: Boolean, default: false },
-	_export: { type: Boolean, default: false },
+	groupBy: { default: null },
+	wbs: { type: Boolean, default: false },
 });
 
 const attrs = useAttrs();
@@ -94,8 +98,11 @@ const normalizedConfig = computed(() => {
 	let config = {
 		zoom: prepareZoom(props.zoom, lCalendar),
 		scales: prepareScales(props.scales, lCalendar),
-		columns: prepareColumns(props.columns, lCalendar),
-		links: normalizeLinks(props.links),
+		columns: prepareColumns(
+			props.columns ?? getDefaultColumns({ resources: !!props.resources, wbs: props.wbs }),
+			lCalendar
+		),
+		links: props.links,
 		cellWidth: props.cellWidth,
 	};
 	if (config.zoom) {
@@ -112,19 +119,6 @@ const normalizedConfig = computed(() => {
 	return config;
 });
 
-watch(
-	() => [props.tasks, props.durationUnit, props.calendar],
-	() => {
-		if (!props._export)
-			parseTaskDates(props.tasks, {
-				durationUnit: props.durationUnit,
-				splitTasks: props.splitTasks,
-				calendar: props.calendar,
-			});
-	},
-	{ immediate: true, flush: "pre" }
-);
-
 // define event route
 let firstInRoute = dataStore.in;
 
@@ -138,25 +132,9 @@ let lastInRoute = new EventBusRouter((a, b) => {
 firstInRoute.setNext(lastInRoute);
 
 const tableAPI = ref(undefined);
-
-// highlightTime: prop can be overridden by calendar effect
-const calendarHighlightTime = ref(null);
-
-watchEffect(() => {
-	if (props.calendar && props.tasks) {
-		calendarHighlightTime.value = (day, unit) => {
-			if (unit === "day" && !props.calendar.getDayHours(day))
-				return "wx-weekend";
-			if (unit === "hour" && !props.calendar.getDayHours(day))
-				return "wx-weekend";
-			return "";
-		};
-	}
-});
-
-const effectiveHighlightTime = computed(() =>
-	calendarHighlightTime.value || props.highlightTime
-);
+const ganttWidth = ref(undefined);
+const COMPACT_WIDTH = 650;
+const compactMode = computed(() => ganttWidth.value <= COMPACT_WIDTH);
 
 // public API
 const getState = dataStore.getState.bind(dataStore);
@@ -168,12 +146,18 @@ const intercept = firstInRoute.intercept.bind(firstInRoute);
 const on = firstInRoute.on.bind(firstInRoute);
 const detach = firstInRoute.detach.bind(firstInRoute);
 const getTask = id => dataStore.getTask(id);
-const serialize = () => dataStore.serialize();
+const getResource = id => dataStore.getResource(id);
+const serialize = config => dataStore.serialize(config);
 const getTable = waitRender =>
 	waitRender
 		? new Promise(res => setTimeout(() => res(tableAPI.value), 1))
 		: tableAPI.value;
 const getHistory = () => dataStore.getHistory();
+const getCalendar = id => dataStore.getCalendar(id);
+const getTaskCalendar = task => dataStore.getTaskCalendar(task);
+const getResourceCalendar = resource => dataStore.getResourceCalendar(resource);
+const getTaskResources = id => dataStore.getTaskResources(id);
+const getResourceTasks = id => dataStore.getResourceTasks(id);
 
 const api = {
 	getState,
@@ -186,8 +170,13 @@ const api = {
 	detach,
 	getTable,
 	getTask,
+	getResource,
 	serialize,
 	getHistory,
+	getCalendar,
+	getTaskResources,
+	getResourceTasks,
+	getTaskCalendar,
 };
 
 defineExpose({
@@ -201,15 +190,27 @@ defineExpose({
 	detach,
 	getTable,
 	getTask,
+	getResource,
 	serialize,
 	getHistory,
+	getCalendar,
+	getTaskResources,
+	getResourceTasks,
+	getTaskCalendar,
+	getResourceCalendar,
 });
 
 // common API available in components
 provide("gantt-store", {
 	getReactiveState: dataStore.getReactive.bind(dataStore),
+	getState: dataStore.getState.bind(dataStore),
 	exec: firstInRoute.exec.bind(firstInRoute),
 	getTask: dataStore.getTask.bind(dataStore),
+	getTaskCalendar: dataStore.getTaskCalendar.bind(dataStore),
+	getResourceCalendar: dataStore.getResourceCalendar.bind(dataStore),
+	getCalendar: dataStore.getCalendar.bind(dataStore),
+	getTaskResources: dataStore.getTaskResources.bind(dataStore),
+	getHistory: dataStore.getHistory.bind(dataStore),
 });
 
 let init_once = true;
@@ -218,6 +219,8 @@ const reinitStore = () => {
 	dataStore.init({
 		tasks: props.tasks,
 		links: nc.links,
+		resources: props.resources,
+		assignments: props.assignments,
 		start: props.start,
 		columns: nc.columns,
 		end: props.end,
@@ -241,11 +244,19 @@ const reinitStore = () => {
 		projectStart: props.projectStart,
 		projectEnd: props.projectEnd,
 		calendar: props.calendar,
+		calendars: props.calendars,
 		slack: props.slack,
 		undo: props.undo,
 		_weekStart: lCalendar.weekStart,
 		splitTasks: props.splitTasks,
 		summary: props.summary,
+		groupBy: props.groupBy,
+		highlightTime: props.highlightTime,
+		wbs: props.wbs,
+		displayMode: props.displayMode,
+		gridWidth: props.gridWidth,
+		cellBorders: props.cellBorders,
+		_compactMode: compactMode.value,
 	});
 
 	if (init_once && props.init) {
@@ -262,8 +273,7 @@ watchEffect(reinitStore);
 	<Layout
 		:taskTemplate="props.taskTemplate"
 		:readonly="props.readonly"
-		:cellBorders="props.cellBorders"
-		:highlightTime="effectiveHighlightTime"
 		v-model:tableAPI="tableAPI"
+		v-model:ganttWidth="ganttWidth"
 	/>
 </template>

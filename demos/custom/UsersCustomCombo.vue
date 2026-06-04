@@ -1,6 +1,6 @@
 <script setup>
 import { Combo } from "@svar-ui/vue-core";
-import UserStub from "./UserStub.vue";
+import AvatarCell from "./AvatarCell.vue";
 
 const props = defineProps({
 	value: {},
@@ -12,7 +12,7 @@ const props = defineProps({
 <template>
 	<Combo :options="options" :value="value" :onchange="onchange" clear placeholder="Assign to the person">
 		<template #default="{ option }">
-			<UserStub :user="option" />
+			<AvatarCell :user="option" />
 		</template>
 	</Combo>
 </template>

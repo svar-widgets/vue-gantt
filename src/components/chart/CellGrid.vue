@@ -3,14 +3,11 @@ import { ref, watchEffect, inject } from "vue";
 import { subscribe } from "@svar-ui/lib-vue";
 import { grid } from "@svar-ui/gantt-store";
 
-const { borders = "" } = defineProps({
-	borders: { default: "" },
-});
-
 const api = inject("gantt-store");
-const { cellWidth, cellHeight } = api.getReactiveState();
+const { cellWidth, cellHeight, cellBorders } = api.getReactiveState();
 const _cellWidth = subscribe(cellWidth);
 const _cellHeight = subscribe(cellHeight);
+const _cellBorders = subscribe(cellBorders);
 
 const node = ref(null);
 const color = ref("#e4e4e4");
@@ -33,7 +30,7 @@ watchEffect(() => {
 			_cellWidth,
 			_cellHeight,
 			color,
-			borders
+			_cellBorders
 		)}); position: absolute;`"
 	></div>
 </template>

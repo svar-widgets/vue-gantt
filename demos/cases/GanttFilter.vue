@@ -31,6 +31,7 @@ function filterTasks(ev) {
 }
 function reload() {
 	tasks.value = [...data.tasks];
+	if (api.value.serialize().length === data.tasks.length) tasks.value.pop();
 	text.value = "";
 }
 </script>

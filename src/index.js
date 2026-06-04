@@ -5,6 +5,7 @@ import Toolbar from "./components/Toolbar.vue";
 import ContextMenu from "./components/ContextMenu.vue";
 import Editor from "./components/Editor.vue";
 import HeaderMenu from "./components/grid/HeaderMenu.vue";
+import ResourceLoad from "./components/resource/ResourceLoad.vue";
 
 import Tooltip from "./widgets/Tooltip.vue";
 
@@ -16,8 +17,11 @@ export {
 	defaultToolbarButtons,
 	defaultMenuOptions,
 	defaultColumns,
+	getDefaultColumns,
+	getResourceColumns,
 	defaultTaskTypes,
 	getEditorItems,
+	getEditorButtons,
 	getToolbarButtons,
 	getMenuOptions,
 	registerScaleUnit,
@@ -34,6 +38,7 @@ export {
 	Toolbar,
 	Tooltip,
 	Editor,
+	ResourceLoad,
 	Willow,
 	WillowDark,
 	version,

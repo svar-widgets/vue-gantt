@@ -14,7 +14,7 @@ const tasks = ref([...data.tasks]);
 
 function reload() {
 	tasks.value = [...data.tasks];
-	tasks.value.pop();
+	if (api.value.serialize().length === data.tasks.length) tasks.value.pop();
 }
 function clear() {
 	api.value.exec("filter-tasks", {});

@@ -1,155 +1,91 @@
 <script setup>
 defineOptions({ name: "GanttWidgetsTooltip" });
 
-import { ref, watchEffect } from "vue";
-import { locateID, getID } from "@svar-ui/lib-dom";
+import { computed } from "vue";
+import { Tooltip } from "@svar-ui/vue-core";
+import { getID, locateID } from "@svar-ui/lib-dom";
 
 const props = defineProps({
 	api: {},
+	at: { default: "point" },
+	overflow: { default: false },
 	content: {},
+	resolver: { type: Function },
 });
 
-const area = ref(null);
-const areaCoords = ref({});
-const contentProps = ref({});
-const tooltipNode = ref(null);
-const pos = ref({});
+const resolver = computed(() => props.resolver || defaultResolver);
 
-function findAttribute(node) {
-	const trg = node;
-	while (node) {
-		if (node.getAttribute) {
-			const id = getID(node, "data-tooltip-id");
-			const at = getID(node, "data-tooltip-at");
-			const tooltip = node.getAttribute("data-tooltip");
-			if (id || tooltip) {
-				const segment = locateID(trg, "data-segment");
-				return { id, tooltip, target: node, at, segment };
+function defaultResolver(element, ev) {
+	if (!props.api) return null;
+
+	// (1) Match against tasks / segments
+	const taskId = getID(element, "data-task-id");
+	if (taskId) {
+		const task = props.api.getTask(taskId);
+		if (!task) return null;
+		if (props.overflow) {
+			const node = element.querySelector(".wx-content");
+			if (node && node.scrollWidth <= node.clientWidth) return null;
+		}
+		const segmentIndex = locateID(ev.target, "data-segment");
+		if (props.content) {
+			return { api: props.api, data: { task, segmentIndex } };
+		} else {
+			if (segmentIndex !== null) {
+				return task.segments?.[segmentIndex]?.text ?? "";
+			} else {
+				return task.text ?? "";
 			}
 		}
-		node = node.parentNode;
 	}
 
-	return {
-		id: null,
-		tooltip: null,
-		target: null,
-		at: null,
-		segment: null,
-	};
-}
-
-watchEffect(() => {
-	if (tooltipNode.value) {
-		const tooltipCoords = tooltipNode.value.getBoundingClientRect();
-		if (tooltipCoords.right >= areaCoords.value.right) {
-			pos.value.left = areaCoords.value.width - tooltipCoords.width - 5;
-		}
-		if (tooltipCoords.bottom >= areaCoords.value.bottom) {
-			pos.value.top -= tooltipCoords.bottom - areaCoords.value.bottom + 2;
-		}
-	}
-});
-
-let timer;
-const TIMEOUT = 300;
-const debounce = code => {
-	clearTimeout(timer);
-	timer = setTimeout(() => {
-		code();
-	}, TIMEOUT);
-};
-
-function move(e) {
-	let { id, tooltip, target, at, segment } = findAttribute(e.target);
-	pos.value = null;
-	contentProps.value = {};
-
-	if (!tooltip) {
-		if (!id) {
-			clearTimeout(timer);
-			return;
+	// (2) Match against links
+	const linkId = getID(element, "data-link-id");
+	if (linkId) {
+		const state = props.api.getState();
+		const link = state.links.byId(linkId);
+		if (!link) return null;
+		if (props.content) {
+			return { api: props.api, data: { link } };
 		} else {
-			tooltip = getTaskText(id, segment);
+			return null;
 		}
 	}
 
-	debounce(() => {
-		if (id) {
-			contentProps.value = { data: getTaskObj(id) };
-			if (segment != null) contentProps.value.segmentIndex = segment;
-		}
-
-		const targetCoords = target.getBoundingClientRect();
-		areaCoords.value = area.value.getBoundingClientRect();
-
-		let top, left;
-		if (at === "left") {
-			top = targetCoords.top + 5 - areaCoords.value.top;
-			left = targetCoords.right + 5 - areaCoords.value.left;
+	// (3) Match against rollups
+	const rollupId = getID(element, "data-rollup-id");
+	if (rollupId) {
+		const task = props.api.getTask(rollupId);
+		if (!task) return null;
+		if (props.content) {
+			return { api: props.api, data: { rollup: task } };
 		} else {
-			top = targetCoords.top + targetCoords.height - areaCoords.value.top;
-			left = e.clientX - areaCoords.value.left;
+			return task.text ?? "";
 		}
+	}
 
-		pos.value = { top, left, text: tooltip };
-	});
-}
+	// (4) Match against resources
+	const resourceId = getID(element, "data-resource-id");
+	if (resourceId) {
+		const resource = props.api.getResource(resourceId);
+		if (!resource) return null;
+		if (props.content) {
+			return {
+				api: props.api,
+				data: { resource },
+			};
+		} else {
+			return resource.name ?? "";
+		}
+	}
 
-function getTaskObj(id) {
-	return props.api?.getTask(id) || null;
-}
-
-function getTaskText(id, segment) {
-	const task = getTaskObj(id);
-	if (segment !== null && task?.segments)
-		return task.segments[segment]?.text || "";
-	return task?.text || "";
+	// (5) No match, continue
+	return null;
 }
 </script>
 
 <template>
-	<div class="wx-tooltip-area" ref="area" @mousemove="move">
-		<div
-			v-if="pos && (pos.text || content)"
-			class="wx-gantt-tooltip"
-			ref="tooltipNode"
-			:style="`top:${pos.top}px;left:${pos.left}px`"
-		>
-			<component
-				v-if="content"
-				:is="content"
-				v-bind="contentProps"
-			/>
-			<div v-else-if="pos.text" class="wx-gantt-tooltip-text">
-				{{ pos.text }}
-			</div>
-		</div>
-
+	<Tooltip :at="at" :content="content" :resolver="resolver">
 		<slot />
-	</div>
+	</Tooltip>
 </template>
-
-<style scoped>
-.wx-tooltip-area {
-	position: relative;
-	height: 100%;
-	width: 100%;
-}
-
-:deep(.wx-gantt-tooltip) {
-	pointer-events: none;
-	position: absolute;
-	z-index: 10;
-	box-shadow: var(--wx-box-shadow);
-	border-radius: 2px;
-	overflow: hidden;
-}
-
-.wx-gantt-tooltip-text {
-	padding: 6px 10px;
-	background-color: var(--wx-tooltip-background);
-	font: var(--wx-tooltip-font);
-	color: var(--wx-tooltip-font-color);
-}
-</style>

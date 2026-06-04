@@ -3,8 +3,14 @@ defineOptions({ name: "GanttEditor" });
 
 import { ref, computed, watch, watchEffect, inject, provide } from "vue";
 import { Editor, registerEditorItem } from "@svar-ui/vue-editor";
-import { Locale } from "@svar-ui/vue-core";
-import { getEditorItems, prepareEditTask } from "@svar-ui/gantt-store";
+import { registerToolbarItem } from "@svar-ui/vue-toolbar";
+import { Locale, Tabs } from "@svar-ui/vue-core";
+import {
+	getEditorItems,
+	prepareEditTask,
+	getEditorButtons,
+	filterEditorButtons,
+} from "@svar-ui/gantt-store";
 import { dateToString, locale } from "@svar-ui/lib-dom";
 import { en } from "@svar-ui/gantt-locales";
 import { en as coreEn } from "@svar-ui/core-locales";
@@ -19,9 +25,8 @@ import {
 } from "@svar-ui/vue-core";
 import Links from "./editor/Links.vue";
 import DateTimePicker from "./editor/DateTimePicker.vue";
-
-//helpers
-import { useModeObserver } from "../helpers/modeResizeObserver";
+import Resources from "./editor/Resources.vue";
+import Segments from "./editor/Segments.vue";
 
 registerEditorItem("select", RichSelect);
 registerEditorItem("date", DateTimePicker);
@@ -30,6 +35,9 @@ registerEditorItem("slider", Slider);
 registerEditorItem("counter", Counter);
 registerEditorItem("links", Links);
 registerEditorItem("checkbox", Checkbox);
+registerEditorItem("resources", Resources);
+registerEditorItem("segments", Segments);
+registerToolbarItem("tabs", Tabs);
 
 const props = defineProps({
 	api: { default: null },
@@ -38,7 +46,7 @@ const props = defineProps({
 	layout: { default: "default" },
 	readonly: { type: Boolean, default: false },
 	placement: { default: "sidebar" },
-	bottomBar: { type: [Boolean, Object], default: true },
+	bottomBar: { type: [Boolean, Object], default: false },
 	topBar: { type: [Boolean, Object], default: true },
 	autoSave: { type: Boolean, default: true },
 	focus: { type: Boolean, default: false },
@@ -61,55 +69,15 @@ const unscheduledTasks = subscribeLater(() => props.api?.getReactiveState()?.uns
 const rollups = subscribeLater(() => props.api?.getReactiveState()?.rollups);
 const summary = subscribeLater(() => props.api?.getReactiveState()?.summary);
 const links = subscribeLater(() => props.api?.getReactiveState()?.links);
+const splitTasks = subscribeLater(() => props.api?.getReactiveState()?.splitTasks);
 const taskTypes = subscribeLater(() => props.api?.getReactiveState()?.taskTypes);
+const resources = subscribeLater(() => props.api?.getReactiveState()?.resources ?? null);
+const compactMode = subscribeLater(() => props.api?.getReactiveState()?._compactMode);
 const undo = subscribeLater(() => props.api?.getReactiveState()?.undo);
-const segmentIndex = subscribeLater(() => props.api?.getReactiveState()?.segmentIndex);
-const isSegment = subscribeLater(() => props.api?.getReactiveState()?.isSegment);
 
-const normalizedTopBar = computed(() => {
-	if (props.topBar === true && !props.readonly) {
-		const buttons = [
-			{ comp: "icon", icon: "wxi-close", id: "close" },
-			{ comp: "spacer" },
-			{
-				comp: "button",
-				type: "danger",
-				text: _("Delete"),
-				id: "delete",
-			},
-		];
-		if (props.autoSave) return { items: buttons };
-		return {
-			items: [
-				...buttons,
-				{
-					comp: "button",
-					type: "primary",
-					text: _("Save"),
-					id: "save",
-				},
-			],
-		};
-	}
-	return props.topBar;
-});
-
-// resize
-const compactMode = ref(false);
-const styleCss = computed(() => (compactMode.value ? "wx-full-screen" : ""));
-
-watchEffect(onCleanup => {
-	const ro = useModeObserver(handleResize);
-	ro.observe();
-
-	onCleanup(() => {
-		ro.disconnect();
-	});
-});
-
-function handleResize(mode) {
-	compactMode.value = mode;
-}
+const defBatch = "general";
+const activeBatch = ref(defBatch);
+const styleCss = computed(() => (compactMode().value ? "wx-full-screen" : ""));
 
 const baseItems = computed(() =>
 	getEditorItems({
@@ -117,28 +85,36 @@ const baseItems = computed(() =>
 		rollups: rollups().value,
 		summary: summary().value,
 		taskTypes: taskTypes().value,
+		resources: resources().value,
+		splitTasks: splitTasks().value,
 	})
 );
 
-const linksActionsMap = ref({});
+const linksActions = ref(new Map());
+const assignmentsActions = ref(new Map());
+const segmentsActions = ref(new Map());
 const inProgress = ref(null);
 
 const editorValues = ref(undefined);
 const editorErrors = ref(null);
 
+const externalValues = {
+	taskAssignments: null,
+	predecessors: null,
+	successors: null,
+};
+const notSavedValues = ref({ ...externalValues });
+
 const task = computed(() => {
 	const $activeTask = activeTask().value;
 	if (!$activeTask) return null;
-	let data;
-	if (isSegment().value && $activeTask.segments)
-		data = { ...$activeTask.segments[segmentIndex().value] };
-	else data = { ...$activeTask };
+	const data = { ...$activeTask };
 
 	if (props.readonly) {
 		// preserve parent to differentiate between segment and task
 		let values = { parent: data.parent };
 		baseItems.value.forEach(({ key, comp }) => {
-			if (comp !== "links") {
+			if (comp !== "links" && comp !== "resources") {
 				const value = data[key];
 				if (comp === "date" && value instanceof Date) {
 					values[key] = dateFormat(value);
@@ -159,90 +135,161 @@ watch(task, val => {
 });
 
 watch(taskId, () => {
-	linksActionsMap.value = {};
+	linksActions.value = new Map();
+	assignmentsActions.value = new Map();
+	segmentsActions.value = new Map();
 	editorErrors.value = null;
 	inProgress.value = null;
+	if (!activeBatch.value) activeBatch.value = defBatch;
+	notSavedValues.value = { ...externalValues };
 });
 
+// items
+
+function normalizeItems(items, area = "form") {
+	if (!props.api || !items || !Array.isArray(items)) return items;
+	return items
+		.filter(b => {
+			if (!editorValues.value) return true;
+			return !b.isHidden || !b.isHidden(editorValues.value, props.api.getState());
+		})
+		.map(b => {
+			const item = { ...b };
+			if (item.items && Array.isArray(item.items)) {
+				item.items = normalizeItems(item.items);
+				return item;
+			}
+			if (area === "form" && !item.batch) {
+				item.batch = defBatch;
+			}
+
+			if (
+				["links", "resources", "segments"].includes(item.key) &&
+				props.api
+			) {
+				item.api = props.api;
+				item.autoSave = props.autoSave;
+				if (item.key === "resources") {
+					item.taskAssignments = notSavedValues.value.taskAssignments;
+				} else if (item.key === "links") {
+					item.successors = notSavedValues.value.successors;
+					item.predecessors = notSavedValues.value.predecessors;
+				} else if (item.key === "segments") {
+					item.segments = notSavedValues.value.segments;
+				}
+				item.onextchange = handleExternalChange;
+			}
+			if (item.id === "tabs") {
+				item.api = props.api;
+				item.css = "wx-gantt-tabs";
+				item.value = activeBatch.value;
+				item.onchange = item.onchange || onTabChange;
+			}
+
+			if (item.comp === "slider" && item.key === "progress") {
+				item.labelTemplate = value => `${_(item.label)} ${value}%`;
+			}
+			if (item.text) item.text = _(item.text);
+			if (item.label) item.label = _(item.label);
+			if (item.options) item.options = normalizeItems(item.options);
+
+			if (item.config) item.config = { ...item.config };
+			if (item.config?.placeholder)
+				item.config.placeholder = _(item.config.placeholder);
+
+			if (
+				editorValues.value &&
+				item.isDisabled &&
+				item.isDisabled(
+					editorValues.value,
+					props.api.getState(),
+					props.api.getTaskCalendar(editorValues.value)
+				)
+			) {
+				item.disabled = true;
+			} else delete item.disabled;
+			return item;
+		});
+}
+
 const editorItems = computed(() => {
-	let eItems = props.items.length ? props.items : baseItems.value;
-	eItems = prepareEditorItems(eItems, editorValues.value);
-	if (!editorValues.value) return eItems;
-	return eItems.filter(
-		item =>
-			!item.isHidden ||
-			!item.isHidden(editorValues.value, props.api.getState())
-	);
+	const eItems = props.items.length ? props.items : baseItems.value;
+	return normalizeItems(eItems);
+});
+
+const editorBatches = computed(() => new Set(editorItems.value.map(i => i.batch)));
+
+watch(editorBatches, batches => {
+	if (!batches.has(activeBatch.value)) activeBatch.value = defBatch;
 });
 
 const editorKeys = computed(() => editorItems.value.map(i => i.key));
 
-function prepareEditorItems(items, task) {
-	return items.map(a => {
-		const item = { ...a };
-		if (a.config) item.config = { ...item.config };
-		if (item.comp === "links" && props.api) {
-			item.api = props.api;
-			item.autoSave = props.autoSave;
-			item.onlinkschange = handleLinksChange;
+function normalizeBar(bar, batches, type) {
+	bar = typeof bar !== "object" ? {} : { ...bar };
+	if (!bar.items) {
+		bar.items = getEditorButtons({
+			resources: resources().value,
+			autoSave: props.autoSave,
+			splitTasks: splitTasks().value,
+		});
+	}
+	bar.items = filterEditorButtons(bar.items, item => {
+		if (item.id === "tabs") {
+			item.type = item.type || type;
+			// filter options by batches and hide tabs with one tab
+			item.options = item.options.filter(op => batches.has(op.id));
+			if (item.options.length < 2) return false;
 		}
-		if (item.comp === "select" && item.key === "type") {
-			const options = item.options ?? [];
-			item.options = options.map(t => ({
-				...t,
-				label: _(t.label),
-			}));
-		}
+		return true;
+	});
+	bar.items = normalizeItems(bar.items, "toolbar");
+	if (!bar.layout) {
+		const isColumn = bar.items.some(i => i.items);
+		bar.layout = isColumn ? "column" : "row";
+	}
+	return bar;
+}
 
-		if (item.comp === "slider" && item.key === "progress") {
-			item.labelTemplate = value => `${_(item.label)} ${value}%`;
-		}
+const normalizedTopBar = computed(() => {
+	if (!props.topBar || props.readonly) return false;
+	return normalizeBar(props.topBar, editorBatches.value, "top");
+});
 
-		if (item.label) item.label = _(item.label);
-		if (item.config?.placeholder)
-			item.config.placeholder = _(item.config.placeholder);
+const normalizedBottomBar = computed(() => {
+	if (!props.bottomBar || props.readonly) return false;
+	return normalizeBar(props.bottomBar, editorBatches.value, "bottom");
+});
 
-		if (task) {
-			if (item.isDisabled && item.isDisabled(task, props.api.getState())) {
-				item.disabled = true;
-			} else delete item.disabled;
-		}
-		return item;
+function handleExternalChange({ view, event, values }) {
+	const { id, action, data } = event;
+	let actions;
+	if (view === "links") actions = linksActions.value;
+	else if (view === "resources") actions = assignmentsActions.value;
+	else if (view === "segments") actions = segmentsActions.value;
+	actions.set(id, { action, data });
+	Object.keys(values).forEach(key => {
+		notSavedValues.value[key] = values[key];
 	});
 }
 
-function handleLinksChange({ id, action, data }) {
-	linksActionsMap.value[id] = { action, data };
-}
-
-function saveLinks() {
-	for (let link in linksActionsMap.value) {
-		if (links().value.byId(link)) {
-			const { action, data } = linksActionsMap.value[link];
+function saveSections() {
+	for (let [linkId, value] of linksActions.value) {
+		if (links().value.byId(linkId)) {
+			const { action, data } = value;
 			props.api.exec(action, data);
 		}
 	}
+	[assignmentsActions.value, segmentsActions.value].forEach(actions => {
+		for (let [, value] of actions) {
+			const { action, data } = value;
+			props.api.exec(action, data);
+		}
+	});
 }
 
 function deleteTask() {
-	const $taskId = taskId().value;
-	const $activeTask = activeTask().value;
-	const $segmentIndex = segmentIndex().value;
-
-	const id = $taskId.id || $taskId;	
-	if (isSegment().value) {
-		if ($activeTask.segments) {
-			const segments = $activeTask.segments.filter(
-				(s, index) => index !== $segmentIndex
-			);
-			props.api.exec("update-task", {
-				id,
-				task: { segments },
-			});
-		}
-	} else {
-		props.api.exec("delete-task", { id });
-	}
+	props.api.exec("delete-task", { id: taskId().value });
 }
 
 function hide() {
@@ -250,13 +297,11 @@ function hide() {
 }
 
 function handleAction(ev) {
-	const { item, changes } = ev;
+	const { item } = ev;
 	if (item.id === "delete") {
 		deleteTask();
-	}
-	if (item.id === "save") {
-		if (!changes.length) saveLinks();
-		else return;
+	} else if (item.id === "save") {
+		saveSections();
 	}
 	if (item.comp) hide();
 }
@@ -281,13 +326,13 @@ function normalizeTask(task, key, input) {
 	if (unscheduledTasks().value && task.type === "summary")
 		task.unscheduled = false;
 
-	prepareEditTask(task, props.api.getState(), key);
+	prepareEditTask(task, props.api.getState(), props.api.getTaskCalendar(task), key);
 	if (!input) inProgress.value = false;
 	return task;
 }
 
 function handleSave(ev) {
-	if (!props.autoSave) save(ev.values);
+	if (!props.autoSave) save(ev.values, ev.changes);
 }
 
 function handleValidation(check) {
@@ -295,16 +340,7 @@ function handleValidation(check) {
 	editorErrors.value = check.errors;
 }
 
-function save(values) {
-	const $taskId = taskId().value;
-
-	values = {
-		...values,
-		unscheduled:
-			unscheduledTasks().value &&
-			values.unscheduled &&
-			values.type !== "summary",
-	};
+function save(values, changes) {
 	delete values.links;
 	delete values.data;
 
@@ -315,15 +351,15 @@ function save(values) {
 		delete values.duration;
 
 	const data = {
-		id: $taskId.id || $taskId,
+		id: taskId().value,
 		task: values,
-		...(isSegment().value && { segmentIndex: segmentIndex().value }),
 	};
 	if (props.autoSave && inProgress.value) data.inProgress = inProgress.value;
 
 	props.api.exec("update-task", data);
 
-	if (!props.autoSave) saveLinks();
+	// when changes is not empty, Editor calls onsave and onaction({id: "save})
+	if (!props.autoSave && !changes?.length) saveSections();
 }
 
 const defaultHotkeys = computed(() =>
@@ -340,6 +376,10 @@ const defaultHotkeys = computed(() =>
 			}
 		: {}
 );
+
+function onTabChange(ev) {
+	activeBatch.value = ev.value;
+}
 </script>
 
 <template>
@@ -349,12 +389,13 @@ const defaultHotkeys = computed(() =>
 			:items="editorItems"
 			:values="task"
 			:topBar="normalizedTopBar"
-			:bottomBar="bottomBar"
+			:bottomBar="normalizedBottomBar"
 			:placement="placement"
 			:layout="layout"
 			:readonly="readonly"
 			:autoSave="autoSave"
 			:focus="focus"
+			:activeBatch="activeBatch"
 			:onaction="handleAction"
 			:onsave="handleSave"
 			:onvalidation="handleValidation"
@@ -367,8 +408,41 @@ const defaultHotkeys = computed(() =>
 <style scoped>
 :global(.wx-sidearea .wx-gantt-editor) {
 	width: 450px;
+	&.wx-full-screen {
+		width: 100%;
+	}
 }
-:global(.wx-sidearea .wx-gantt-editor.wx-full-screen) {
-	width: 100%;
+
+:global(.wx-gantt-editor .wx-editor-toolbar) {
+	margin-bottom: 4px;
+	& :global(.wx-toolbar) {
+		padding-left: 0;
+		padding-right: 0;
+		gap: 16px;
+	}
+	& :global(.wx-tb-body) {
+		gap: 8px;
+	}
+	& :global(.wx-tb-element) {
+		padding-left: 0;
+		padding-right: 0;
+	}
+	& :global(.wx-gantt-tabs) {
+		align-self: start;
+	}
+	& :global(.wx-gantt-tabs .wx-tabs) {
+		gap: 16px;
+	}
+
+	& :global(.wx-gantt-tabs button) {
+		padding-left: 0;
+		padding-right: 0;
+		min-width: 40px;
+	}
+	& :global(.wx-gantt-tabs .wx-active:after),
+	& :global(.wx-gantt-tabs button:hover:after) {
+		width: 100%;
+		left: 0;
+	}
 }
 </style>

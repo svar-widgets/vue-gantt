@@ -1,30 +1,35 @@
 <script setup>
 defineOptions({ name: "GanttResizer" });
 
-import { ref, computed, watchEffect } from "vue";
+import { computed } from "vue";
+import { subscribe } from "@svar-ui/lib-vue";
 
 const props = defineProps({
+	api: {},
 	position: { default: "after" },
 	size: { default: 4 },
 	dir: { default: "x" },
 	onmove: { type: Function },
-	compactMode: {},
 	containerWidth: { default: 0 },
-	leftThreshold: { default: 50 },
 	rightThreshold: { default: 50 },
 });
 
-const value = defineModel("value", { default: 0 });
-const display = defineModel("display", { default: "all" });
+const { gridWidth, displayMode, _gridCollapseThreshold, _compactMode } =
+	props.api.getReactiveState();
 
-function getBox(val) {
+const gridWidthVal = subscribe(gridWidth);
+const displayModeVal = subscribe(displayMode);
+const gridCollapseThreshold = subscribe(_gridCollapseThreshold);
+const compactMode = subscribe(_compactMode);
+
+function getBox(value) {
 	let offset = 0;
 	if (props.position === "center") offset = props.size / 2;
 	else if (props.position === "before") offset = props.size;
 
 	const box = {
 		size: [props.size + "px", "auto"],
-		p: [val - offset + "px", "0px"],
+		p: [value - offset + "px", "0px"],
 		p2: ["auto", "0px"],
 	};
 
@@ -34,14 +39,6 @@ function getBox(val) {
 
 let start = 0,
 	pos;
-const active = ref(false);
-const initialPosition = ref(null);
-
-watchEffect(() => {
-	if (initialPosition.value === null && value.value > 0) {
-		initialPosition.value = value.value;
-	}
-});
 
 function getEventPos(ev) {
 	return props.dir === "x" ? ev.clientX : ev.clientY;
@@ -50,15 +47,15 @@ function getEventPos(ev) {
 function down(ev) {
 	// Prevent dragging when in normal mode and only one view is visible
 	if (
-		!props.compactMode &&
-		(display.value === "grid" || display.value === "chart")
+		compactMode.value ||
+		displayModeVal.value === "grid" ||
+		displayModeVal.value === "chart"
 	) {
 		return;
 	}
 
 	start = getEventPos(ev);
-	pos = value.value;
-	active.value = true;
+	pos = gridWidthVal.value;
 
 	document.body.style.cursor = cursor.value;
 	document.body.style.userSelect = "none";
@@ -71,10 +68,12 @@ let timeout;
 function move(ev) {
 	const newPos = pos + getEventPos(ev) - start;
 
-	value.value = newPos;
+	props.api.exec("resize-grid", {
+		width: newPos,
+	});
 	let nextDisplay;
 
-	if (newPos <= props.leftThreshold) {
+	if (newPos <= gridCollapseThreshold.value) {
 		nextDisplay = "chart";
 	} else if (props.containerWidth - newPos <= props.rightThreshold) {
 		nextDisplay = "grid";
@@ -82,43 +81,34 @@ function move(ev) {
 		nextDisplay = "all";
 	}
 
-	if (display.value !== nextDisplay) {
-		display.value = nextDisplay;
+	if (displayModeVal.value !== nextDisplay) {
+		props.api.exec("set-display-mode", {
+			mode: nextDisplay,
+		});
 	}
 
 	if (timeout) clearTimeout(timeout);
-	timeout = setTimeout(
-		() => props.onmove && props.onmove(value.value),
-		100
-	);
+	timeout = setTimeout(() => props.onmove && props.onmove(newPos), 100);
 }
 
 function up() {
 	document.body.style.cursor = "";
 	document.body.style.userSelect = "";
-	active.value = false;
 	window.removeEventListener("mousemove", move);
 	window.removeEventListener("mouseup", up);
 }
 
-function resetToInitial() {
-	display.value = "all";
-	if (initialPosition.value !== null) {
-		value.value = initialPosition.value;
-		if (props.onmove) props.onmove(initialPosition.value);
-	}
-}
-
 function handleExpand(direction) {
-	if (props.compactMode) {
-		display.value = display.value === "chart" ? "grid" : "chart";
+	let mode;
+	if (compactMode.value) {
+		mode = displayModeVal.value === "chart" ? "grid" : "chart";
 	} else {
-		if (display.value === "grid" || display.value === "chart") {
-			resetToInitial();
-		} else {
-			display.value = direction === "left" ? "chart" : "grid";
-		}
+		if (displayModeVal.value === "grid" || displayModeVal.value === "chart") {
+			mode = "all";
+		} else mode = direction === "left" ? "chart" : "grid";
 	}
+
+	props.api.exec("set-display-mode", { mode });
 }
 
 function handleExpandLeft() {
@@ -129,9 +119,9 @@ function handleExpandRight() {
 	handleExpand("right");
 }
 
-const b = computed(() => getBox(value.value));
+const b = computed(() => getBox(gridWidthVal.value));
 const cursor = computed(() =>
-	display.value !== "all"
+	displayModeVal.value !== "all"
 		? "auto"
 		: props.dir === "x"
 			? "ew-resize"
@@ -144,8 +134,7 @@ const cursor = computed(() =>
 		:class="[
 			'wx-resizer',
 			`wx-resizer-${dir}`,
-			`wx-resizer-display-${display}`,
-			{ 'wx-resizer-active': active },
+			`wx-resizer-display-${displayModeVal}`,
 		]"
 		@mousedown="down"
 		:style="`width:${b.size[0]}; height: ${b.size[1]}; cursor:${cursor};`"

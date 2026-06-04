@@ -21,7 +21,7 @@ const $criticalPath = subscribe(criticalPath);
 
 function onClickOutside(event) {
 	const css = event?.target?.classList;
-	if (!css?.contains("wx-line") && !css?.contains("wx-delete-button")) {
+	if (!css?.contains("wx-line-hitbox") && !css?.contains("wx-delete-button")) {
 		props.onSelectLink(null);
 	}
 }
@@ -29,7 +29,7 @@ function onClickOutside(event) {
 
 <template>
 	<svg class="wx-links">
-		<polyline
+		<g
 			v-for="link in $links"
 			:key="link.id"
 			:class="[
@@ -39,16 +39,21 @@ function onClickOutside(event) {
 					'wx-line-selectable': !readonly,
 				},
 			]"
-			:points="link.$p"
 			:onclick="() => !readonly && onSelectLink(link.id)"
 			:data-link-id="setID(link.id)"
-		/>
-		<polyline
+		>
+			<polyline class="wx-line-draw" :points="link.$p" />
+			<polyline class="wx-line-hitbox" :points="link.$p" />
+		</g>
+		<g
 			v-if="!readonly && selectedLink"
-			class="wx-line wx-line-selected wx-line-selectable wx-delete-link"
-			:points="selectedLink.$p"
 			v-click-outside="onClickOutside"
-		/>
+			class="wx-line wx-line-selected wx-line-selectable wx-delete-link"
+			:data-link-id="setID(selectedLink.id)"
+		>
+			<polyline class="wx-line-draw" :points="selectedLink.$p" />
+			<polyline class="wx-line-hitbox" :points="selectedLink.$p" />
+		</g>
 	</svg>
 </template>
 
@@ -62,27 +67,40 @@ function onClickOutside(event) {
 }
 
 .wx-line {
-	user-select: auto;
-	pointer-events: stroke;
-	position: relative;
+	pointer-events: none;
+}
+
+.wx-line > .wx-line-draw {
+	pointer-events: none;
 	stroke: var(--wx-gantt-link-color);
 	stroke-width: 2;
-	z-index: 0;
 	fill: transparent;
 }
-.wx-line-selectable:hover {
+
+.wx-line > .wx-line-hitbox {
+	pointer-events: stroke;
+	stroke: transparent;
+	stroke-width: 20;
+	fill: transparent;
+}
+
+.wx-line-selectable:hover > .wx-line-draw {
 	stroke: var(--wx-gantt-link-color-hovered);
 }
-.wx-line-selectable.wx-critical:hover {
+
+.wx-line-selectable.wx-critical:hover > .wx-line-draw {
 	stroke: var(--wx-gantt-link-critical-color-hovered);
 }
+
 .wx-line-selectable {
 	cursor: pointer;
 }
-.wx-line.wx-line-selected {
+
+.wx-line.wx-line-selected > .wx-line-draw {
 	stroke: var(--wx-color-danger);
 }
-.wx-critical {
+
+.wx-critical > .wx-line-draw {
 	stroke: var(--wx-gantt-link-critical-color);
 }
 </style>

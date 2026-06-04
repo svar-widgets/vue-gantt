@@ -30,7 +30,7 @@ const {
 	_rollups: rRollups,
 	focusTask,
 	criticalPath,
-	tasks: tree,
+	tree,
 	schedule,
 	splitTasks,
 	summary,
@@ -57,6 +57,12 @@ const tasks = computed(() =>
 	_rTasks.value
 		.slice(_area.value.start, _area.value.end)
 		.map(a => ({ ...a }))
+);
+
+// grouping tasks by "resource" duplicates tasks
+// to show a task for each assigned resource
+const hasDuplicatedIds = computed(() =>
+	tasks.value.some(task => task.$id && task.$id !== task.id)
 );
 
 const lengthUnitWidth = computed(() => _scales.value.lengthUnitWidth);
@@ -569,10 +575,10 @@ onUnmounted(() => {
 				]"
 				:style="taskStyle(task)"
 				:data-id="setID(task.id)"
-				:data-tooltip-id="setID(task.id)"
+				:data-task-id="setID(task.id)"
 				:tabindex="focused === task.id ? '0' : '-1'"
 			>
-				<template v-if="!props.readonly">
+				<template v-if="!props.readonly && !hasDuplicatedIds">
 					<template
 						v-if="
 							task.id === selectedLink?.target &&
@@ -682,7 +688,7 @@ onUnmounted(() => {
 					</template>
 				</template>
 
-				<template v-if="!props.readonly">
+				<template v-if="!props.readonly && !hasDuplicatedIds">
 					<template
 						v-if="
 							task.id === selectedLink?.target &&

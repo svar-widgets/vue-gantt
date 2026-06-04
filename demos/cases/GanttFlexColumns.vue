@@ -25,7 +25,7 @@ const columns = [
 	{
 		id: "add-task",
 		header: "Add task",
-		width: 50,
+		width: 37,
 		align: "center",
 	},
 ];

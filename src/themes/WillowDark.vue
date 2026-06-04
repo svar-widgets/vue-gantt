@@ -1,5 +1,8 @@
 <script setup>
+defineOptions({ name: "GanttThemesWillowDark" });
+
 import { WillowDark } from "@svar-ui/vue-core";
+import { WillowDark as GridWillowDark } from "@svar-ui/vue-grid";
 
 const props = defineProps({
 	fonts: { type: Boolean, default: true },
@@ -7,14 +10,17 @@ const props = defineProps({
 </script>
 
 <template>
-    <WillowDark v-if="$slots.default" :fonts="props.fonts">
-        <slot />
-    </WillowDark>
-    <WillowDark v-else :fonts="props.fonts" />
+	<WillowDark v-if="$slots.default" :fonts="props.fonts">
+		<GridWillowDark><slot /></GridWillowDark>
+	</WillowDark>
+	<template v-else>
+		<GridWillowDark :fonts="props.fonts" />
+		<WillowDark :fonts="props.fonts" />
+	</template>
 </template>
 
-<style>
-.wx-willow-dark-theme {
+<style scoped>
+:global(.wx-willow-dark-theme) {
 	color-scheme: dark;
 
 	--wx-gantt-border-color: #384047;
@@ -96,13 +102,11 @@ const props = defineProps({
 	--wx-gantt-marker-font-color: #fff;
 	--wx-gantt-marker-color: rgba(6, 189, 248, 0.77);
 
-	/* tooltips */
-	--wx-tooltip-font: var(--wx-font-weight) var(--wx-font-size)
-		var(--wx-font-family);
-	--wx-tooltip-font-color: #e6e6e6;
-	--wx-tooltip-background: #4f525a;
-
 	/* sidebar */
 	--wx-sidebar-close-icon: #384047;
+
+	/* resources */
+	--wx-gantt-load-normal-color: #283433;
+	--wx-gantt-load-danger-color: #3c2a2c;
 }
 </style>

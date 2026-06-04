@@ -12,7 +12,7 @@ const data = getData();
 const api = ref(null);
 
 function scrollToStart() {
-	api.value.exec("scroll-chart", { date: new Date() });
+	api.value.exec("scroll-chart", { date: new Date(2026, 3, 1) });
 }
 function scrollToEnd() {
 	api.value.exec("scroll-chart", { date: new Date(2026, 5, 1) });
@@ -59,8 +59,5 @@ function scrollToEnd() {
 	position: relative;
 	height: 100%;
 	overflow: hidden;
-}
-.input {
-	margin: 4px;
 }
 </style>

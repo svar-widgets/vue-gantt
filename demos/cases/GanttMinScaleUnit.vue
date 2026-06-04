@@ -68,6 +68,13 @@ const scales = computed(() => {
 	return allScales;
 });
 
+function getSmallerCount(d) {
+	if (!d) return 15;
+	const start = sprintStart(d).getDate();
+	const end = sprintEnd(d).getDate();
+	return end - start + 1;
+}
+
 registerScaleUnit("sprint", {
 	start: sprintStart,
 	end: sprintEnd,
@@ -91,15 +98,11 @@ registerScaleUnit("sprint", {
 		return addDays(newDate, diff);
 	},
 	diff: (endDate, startDate) => {
-		return Math.floor(differenceInDays(endDate, startDate) / 15);
+		return Math.floor(differenceInDays(endDate, startDate) / 15) || 1;
 	},
 	smallerCount: {
-		day: d => {
-			if (!d) return 15;
-			const start = sprintStart(d).getDate();
-			const end = sprintEnd(d).getDate();
-			return end - start + 1;
-		},
+		day: getSmallerCount,
+		hour: d => getSmallerCount(d) * 24,
 	},
 	biggerCount: {
 		year: 24,
@@ -138,8 +141,7 @@ registerScaleUnit("sprint", {
 
 .bar {
 	padding: 20px;
-	background-color: var(--wx-background);
-	border: var(--wx-border);
+	border-bottom: var(--wx-gantt-border);
 
 	--wx-input-width: 180px;
 }

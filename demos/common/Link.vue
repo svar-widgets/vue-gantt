@@ -47,7 +47,7 @@ const isActive = computed(() => {
 	font-weight: 400;
 	padding: 0 16px 0 12px;
 	border-left: 4px solid transparent;
-	color: #595b66;
+	color: var(--demo-link-fg);
 	list-style: none;
 	cursor: pointer;
 	text-decoration: none;
@@ -60,8 +60,8 @@ const isActive = computed(() => {
 .demo.active,
 .demo:hover {
 	font-weight: 500;
-	color: #42454d;
-	background-color: #f1f1f1;
+	color: var(--demo-link-active-fg);
+	background-color: var(--demo-link-active-bg);
 }
 
 .pro {

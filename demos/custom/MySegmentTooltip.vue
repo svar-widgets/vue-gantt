@@ -3,25 +3,26 @@ import { computed } from "vue";
 import { format } from "date-fns";
 
 const props = defineProps({
+	api: {},
 	data: {},
-	segmentIndex: {},
 });
 
-const mask = "yyyy.MM.dd";
-
 const isSegment = computed(
-	() => props.data?.segments && typeof props.segmentIndex === "number"
+	() => props.data?.task?.segments && typeof props.data.segmentIndex === "number"
 );
+
 const values = computed(() =>
-	isSegment.value ? props.data.segments[props.segmentIndex] : props.data
+	isSegment.value ? props.data.task.segments[props.data.segmentIndex] : props.data.task
 );
+
+const mask = "yyyy.MM.dd";
 </script>
 
 <template>
-	<div v-if="data" class="data">
+	<div v-if="data?.task" class="data">
 		<div class="text">
-			<span class="caption">{{ data.type }}:</span>
-			{{ data.text }}
+			<span class="caption">{{ data.task.type }}:</span>
+			{{ data.task.text }}
 		</div>
 		<div v-if="isSegment" class="text">
 			<span class="caption">segment:</span>
@@ -34,6 +35,16 @@ const values = computed(() =>
 		<div v-if="values.end" class="text">
 			<span class="caption">end:</span>
 			{{ format(values.end, mask) }}
+		</div>
+	</div>
+	<div v-else-if="data?.link" class="data">
+		<div class="text">
+			<span class="caption">predecessor:</span>
+			{{ api.getTask(data.link.source).text }}
+		</div>
+		<div class="text">
+			<span class="caption">successor:</span>
+			{{ api.getTask(data.link.target).text }}
 		</div>
 	</div>
 </template>

@@ -30,6 +30,7 @@ const selected = subscribeLater(() => props.api?.getReactiveState()?._selected);
 const undo = subscribeLater(() => props.api?.getReactiveState()?.undo);
 const history = subscribeLater(() => props.api?.getReactiveState()?.history);
 const splitTasks = subscribeLater(() => props.api?.getReactiveState()?.splitTasks);
+const groupBy = subscribeLater(() => props.api?.getReactiveState()?.groupBy);
 
 const historyActions = ["undo", "redo"];
 
@@ -40,6 +41,7 @@ const finalItems = computed(() => {
 		: getToolbarButtons({
 				undo: undo().value,
 				splitTasks: splitTasks().value,
+				group: !!groupBy().value?.field,
 			});
 	return buttons.map(b => {
 		b = { ...b, disabled: false };
@@ -57,18 +59,25 @@ const buttons = computed(() => {
 	const finalButtons = [];
 	finalItems.value.forEach(item => {
 		const action = item.id;
-		if (action === "add-task") {
-			finalButtons.push(item);
-		} else if (!historyActions.includes(action)) {
-			if (!$_selected?.length || !props.api) return;
-			finalButtons.push({
-				...item,
-				disabled:
-					item.isDisabled &&
-					$_selected.some(task =>
-						item.isDisabled(task, props.api.getState())
-					),
-			});
+
+		if (action === "add-task" || !historyActions.includes(action)) {
+			if (!$_selected?.length || !props.api) {
+				if (action !== "add-task") return;
+				finalButtons.push(item);
+			} else {
+				finalButtons.push({
+					...item,
+					disabled:
+						item.isDisabled &&
+						$_selected.some(task =>
+							item.isDisabled(
+								task,
+								props.api.getState(),
+								props.api.getTaskCalendar(task)
+							)
+						),
+				});
+			}
 		} else if (historyActions.includes(action)) {
 			finalButtons.push({
 				...item,
