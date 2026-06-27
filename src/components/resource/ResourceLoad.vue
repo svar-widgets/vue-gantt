@@ -10,7 +10,10 @@ import {
 	provide,
 } from "vue";
 import { locateID } from "@svar-ui/lib-dom";
-import { getResourceColumns } from "@svar-ui/gantt-store";
+import {
+	getResourceColumns,
+	normalizeResourceColumns,
+} from "@svar-ui/gantt-store";
 import { locale as l } from "@svar-ui/lib-dom";
 import { en } from "@svar-ui/gantt-locales";
 import { en as coreEn } from "@svar-ui/core-locales";
@@ -27,12 +30,13 @@ import LoadCell from "./LoadCell.vue";
 import {
 	getFlexBasis,
 	getFitColumns,
+	getFillColumn,
+	getColumnsWidth,
 	getSortMarks,
-	adjustColumns,
-	checkFlex,
 	getResourceLoadColumns,
 	getScrollbarWidth,
 } from "../../helpers/grid";
+import { createZoomWheelHandler } from "../../helpers/zoom";
 
 const props = defineProps({
 	api: {},
@@ -67,6 +71,7 @@ const rGridCollapseThreshold = subscribeLater(
 	() => state.value?._gridCollapseThreshold
 );
 const rCellBorders = subscribeLater(() => state.value?.cellBorders);
+const rZoom = subscribeLater(() => state.value?.zoom);
 
 const $rResources = computed(() => rResources().value ?? []);
 const $rScales = computed(() => rScales().value ?? null);
@@ -83,6 +88,7 @@ const $_gridCollapseThreshold = computed(
 	() => rGridCollapseThreshold().value ?? null
 );
 const $cellBorders = computed(() => rCellBorders().value ?? null);
+const $zoom = computed(() => rZoom().value ?? null);
 
 let locale = inject("wx-i18n", null);
 if (!locale) {
@@ -92,6 +98,7 @@ if (!locale) {
 const _ = locale.getGroup("gantt");
 
 const containerWidth = ref(0);
+const chartContainer = ref(null);
 const scalesDiv = ref(null);
 const rightContainerHeight = ref(0);
 let leftApi;
@@ -99,7 +106,7 @@ let rightApi;
 
 const finalColumns = computed(() => {
 	if (!props.columns || !props.columns.length) return [];
-	let cols = props.columns.map(col => {
+	let cols = normalizeResourceColumns(props.columns).map(col => {
 		col = { ...col };
 		const header = col.header;
 		if (typeof header === "object") {
@@ -131,53 +138,19 @@ const sortMarks = computed(() =>
 );
 
 const gridClientWidth = ref(0);
-const updateFlex = ref(false);
-
-const hasFlexCol = computed(() => {
-	updateFlex.value;
-	return checkFlex(finalColumns.value);
-});
 
 const columnWidth = ref(0);
 watchEffect(() => {
 	let width;
-	// use gantt grid column widths if set; otherwise, calculate
 	if ($_columnsWidth.value) width = $_columnsWidth.value;
 	else if ($displayMode.value === "chart")
 		width = $_gridCollapseThreshold.value || 0;
-	else if (
-		props.columns?.length &&
-		props.columns.every(c => c.width && !c.flexgrow)
-	) {
-		width = props.columns.reduce((acc, c) => acc + c.width, 0);
-	} else width = 440; // default columns width
+	else width = $gridWidth.value;
 	columnWidth.value = width;
 });
 
-function setColumnWidth(resized) {
-	if (!checkFlex(finalColumns.value)) {
-		const newColumnWidth = fitColumns.value.reduce((acc, col) => {
-			if (resized && col.$width) col.$width = col.width;
-			return acc + (col.hidden ? 0 : col.width);
-		}, 0);
-		if (newColumnWidth !== columnWidth.value) columnWidth.value = newColumnWidth;
-	}
-	// hasFlexCol update
-	updateFlex.value = true;
-	updateFlex.value = false;
-}
-
 const fitColumns = computed(() =>
-	getFitColumns(
-		finalColumns.value,
-		columnWidth.value,
-		$displayMode.value,
-		gridClientWidth.value,
-		$gridWidth.value,
-		hasFlexCol.value,
-		$_gridCollapseThreshold.value,
-		"name"
-	)
+	getFitColumns(finalColumns.value, $displayMode.value, "name")
 );
 
 const rightColumns = computed(() =>
@@ -231,9 +204,8 @@ const selectedRows = ref([]);
 
 function initLeft(lapi) {
 	leftApi = lapi;
-	leftApi.intercept("select-row", ev => {
+	leftApi.on("select-row", ev => {
 		selectedRows.value = [ev.id];
-		return false;
 	});
 	leftApi.intercept("sort-rows", ev => {
 		const { key, add } = ev;
@@ -253,13 +225,12 @@ function initLeft(lapi) {
 		return false;
 	});
 
-	leftApi.on("resize-column", () => {
-		setColumnWidth(true);
+	leftApi.intercept("resize-column", ev => {
+		ev.flexgrowFallback = getFillColumn(finalColumns.value, ev.id);
 	});
 
-	leftApi.on("hide-column", ev => {
-		if (!ev.mode) adjustColumns(finalColumns.value);
-		setColumnWidth();
+	leftApi.on("resize-column", () => {
+		columnWidth.value = getColumnsWidth(leftApi.getState().columns);
 	});
 
 	leftApi.on("scroll-to", ev => {
@@ -273,9 +244,8 @@ function initLeft(lapi) {
 
 function initRight(rapi) {
 	rightApi = rapi;
-	rightApi.intercept("select-row", ev => {
+	rightApi.on("select-row", ev => {
 		selectedRows.value = [ev.id];
-		return false;
 	});
 
 	rightApi.on("scroll-to", ev => {
@@ -305,6 +275,16 @@ function getCellStyle(row, col) {
 
 	return "";
 }
+
+const onWheel = computed(
+	() =>
+		props.api &&
+		createZoomWheelHandler(
+			props.api,
+			() => $zoom.value,
+			() => chartContainer.value
+		)
+);
 
 // ResizeObserver for containerWidth
 const containerDiv = ref(null);
@@ -397,7 +377,7 @@ onUnmounted(() => {
 				<Resizer :containerWidth="containerWidth" :api="props.api" />
 			</template>
 
-			<div class="wx-chart">
+			<div class="wx-chart" ref="chartContainer" :onwheel="onWheel">
 				<div
 					class="wx-timescale-viewport"
 					:class="{ 'wx-v-scroll-reserve': rightHasVScroll }"

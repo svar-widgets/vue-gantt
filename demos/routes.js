@@ -6,7 +6,6 @@ import GanttExcelImport from "./cases/GanttExcelImport.vue";
 import GanttScales from "./cases/GanttScales.vue";
 import GanttGrid from "./cases/GanttGrid.vue";
 import GanttNoGrid from "./cases/GanttNoGrid.vue";
-import GanttFixedColumns from "./cases/GanttFixedColumns.vue";
 import GanttFlexColumns from "./cases/GanttFlexColumns.vue";
 import GanttReadOnly from "./cases/GanttReadOnly.vue";
 import GanttPreventActions from "./cases/GanttPreventActions.vue";
@@ -144,16 +143,16 @@ export const links = [
 		"GanttFlexColumns",
 	],
 	[
-		"/grid-fixed-columns/:skin",
-		"Fixed grid columns",
-		GanttFixedColumns,
-		"GanttFixedColumns",
-	],
-	[
 		"/grid-custom-columns/:skin",
 		"Custom column content",
 		GanttGrid,
 		"GanttGrid",
+	],
+	[
+		"/display-mode/:skin",
+		"Grid width and display",
+		GanttDisplayMode,
+		"GanttDisplayMode",
 	],
 	["/no-grid/:skin", "No grid", GanttNoGrid, "GanttNoGrid"],
 	[
@@ -421,11 +420,5 @@ export const links = [
 		"GanttMultiple",
 	],
 	["/fullscreen/:skin", "Fullscreen", GanttFullscreen, "GanttFullscreen"],
-	[
-		"/display-mode/:skin",
-		"Display mode",
-		GanttDisplayMode,
-		"GanttDisplayMode",
-	],
 	["/locale/:skin", "Locales", GanttLocale, "GanttLocale"],
 ];

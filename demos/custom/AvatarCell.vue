@@ -37,4 +37,7 @@ const value = computed(() => {
 	align-items: center;
 	gap: 4px;
 }
+:global(.container > div) {
+	margin-top: 5px;
+}
 </style>

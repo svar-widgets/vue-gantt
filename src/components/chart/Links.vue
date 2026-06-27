@@ -15,7 +15,7 @@ const props = defineProps({
 
 const api = inject("gantt-store");
 
-const { _links: links, criticalPath } = api.getReactiveState();
+const { _visibleLinks: links, criticalPath } = api.getReactiveState();
 const $links = subscribe(links);
 const $criticalPath = subscribe(criticalPath);
 

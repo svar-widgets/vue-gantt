@@ -20,16 +20,15 @@ import {
 	getFlexBasis,
 	getScrollX,
 	getFitColumns,
+	getFillColumn,
+	getColumnsWidth,
 	getSortMarks,
-	adjustColumns,
-	checkFlex,
 } from "../../helpers/grid";
 
 const vReorder = asDirective(reorder);
 
 const props = defineProps({
 	readonly: {},
-	columnWidth: {},
 });
 
 const tableAPI = defineModel("tableAPI");
@@ -56,7 +55,6 @@ const {
 	gridWidth: gridWidthStore,
 	displayMode,
 	_compactMode,
-	_gridCollapseThreshold,
 } = api.getReactiveState();
 
 const $scrollTop = subscribe(scrollTop);
@@ -75,9 +73,10 @@ const $groupBy = subscribe(groupBy);
 const $gridWidth = subscribe(gridWidthStore);
 const $displayMode = subscribe(displayMode);
 const $_compactMode = subscribe(_compactMode);
-const $_gridCollapseThreshold = subscribe(_gridCollapseThreshold);
 
 let dragTask = ref(null);
+
+const columnWidth = ref(0);
 
 function execAction(id, action) {
 	if (action === "add-task") {
@@ -195,7 +194,6 @@ const gridClientWidth = ref(0);
 const gridClientHeight = ref(0);
 
 const tableContainer = ref(null);
-const updateFlex = ref(false);
 
 function handleHotkey(ev) {
 	const { key, isInput } = ev;
@@ -246,13 +244,20 @@ function init(tapi) {
 		return false;
 	});
 
-	tapi.on("resize-column", () => {
-		setColumnWidth(true);
+	tapi.intercept("resize-column", ev => {
+		ev.flexgrowFallback = getFillColumn(cols.value, ev.id);
 	});
 
-	tapi.on("hide-column", ev => {
-		if (!ev.mode) adjustColumns(cols.value);
-		setColumnWidth();
+	tapi.on("resize-column", ev => {
+		const columns = tapi.getState().columns;
+		columnWidth.value = getColumnsWidth(columns);
+		if (ev.inProgress !== true) api.exec("set-columns", { columns });
+	});
+
+	tapi.on("hide-column", () => {
+		const columns = tapi.getState().columns;
+		columnWidth.value = getColumnsWidth(columns);
+		api.exec("set-columns", { columns });
 	});
 
 	tapi.intercept("update-cell", e => {
@@ -342,6 +347,13 @@ const cols = computed(() => {
 	return colsArr;
 });
 
+watchEffect(
+	() => {
+		columnWidth.value = getColumnsWidth(cols.value);
+	},
+	{ flush: "pre" }
+);
+
 function getColumnStyle(col) {
 	let style = `wx-text-${col.align} `;
 
@@ -362,7 +374,7 @@ const scrollX = computed(() =>
 	getScrollX(
 		$_compactMode.value,
 		$displayMode.value,
-		props.columnWidth,
+		columnWidth.value,
 		gridClientWidth.value,
 		$gridWidth.value
 	)
@@ -371,7 +383,7 @@ const tableHeight = computed(() =>
 	getGridMinHeight(gridClientHeight.value, $cellHeight.value)
 );
 const tableStyle = computed(() =>
-	tableHeight.value + getGridStyle($displayMode.value, props.columnWidth, scrollX.value)
+	tableHeight.value + getGridStyle($displayMode.value, columnWidth.value, scrollX.value)
 );
 
 // --------
@@ -391,26 +403,6 @@ const allTasks = computed(() => {
 	return rows.map(t => ({ ...t }));
 });
 
-const hasFlexCol = computed(() => {
-	updateFlex.value;
-	return checkFlex(cols.value);
-});
-
-function setColumnWidth(resized) {
-	if (!checkFlex(cols.value)) {
-		const newColumnWidth = fitColumns.value.reduce((acc, col) => {
-			if (resized && col.$width) col.$width = col.width;
-			return acc + (col.hidden ? 0 : col.width);
-		}, 0);
-		if (newColumnWidth !== props.columnWidth) {
-			// columnWidth is a regular prop — parent must handle updates via callback/model
-		}
-	}
-	// hasFlexCol update
-	updateFlex.value = true;
-	updateFlex.value = false;
-}
-
 const sortMarks = computed(() => getSortMarks(allTasks.value, $sort.value));
 
 // preserve filters while sorting
@@ -419,15 +411,7 @@ const filters = computed(() => {
 });
 
 const fitColumns = computed(() =>
-	getFitColumns(
-		cols.value,
-		props.columnWidth,
-		$displayMode.value,
-		gridClientWidth.value,
-		$gridWidth.value,
-		hasFlexCol.value,
-		$_gridCollapseThreshold.value
-	)
+	getFitColumns(cols.value, $displayMode.value)
 );
 
 const bodyOffset = computed(() => scrollDelta.value - $scrollTop.value);
@@ -556,6 +540,8 @@ const gridSizes = computed(() => ({
 	height: 100%;
 	display: flex;
 	align-items: center;
+}
+.wx-table :deep(.wx-body .wx-cell:not([tabindex="0"])) {
 	outline: none;
 }
 .wx-table :deep(.wx-grid .wx-row) {

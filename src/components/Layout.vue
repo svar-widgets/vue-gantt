@@ -37,7 +37,6 @@ const {
 	columns: rColumns,
 	scrollTop: rScrollTop,
 	undo,
-	gridWidth,
 	_columnsWidth,
 } = api.getReactiveState();
 
@@ -47,7 +46,6 @@ const $rCellHeight = subscribe(rCellHeight);
 const $rColumns = subscribe(rColumns);
 const $rScrollTop = subscribe(rScrollTop);
 const $undo = subscribe(undo);
-const $gridWidth = subscribe(gridWidth);
 const $_columnsWidth = subscribe(_columnsWidth);
 
 const ganttHeight = ref(undefined);
@@ -75,7 +73,7 @@ watchEffect(() => {
 
 function chartResizeHandler() {
 	api.exec("resize-chart", {
-		width: ganttWidth.value - $gridWidth.value - scrollSize.value - 4, // resizer width
+		width: ganttWidth.value - $_columnsWidth.value - scrollSize.value - 4, // resizer width
 		height: ganttHeight.value - $rScales.value.height,
 		scrollSize: scrollSize.value,
 	});
@@ -170,7 +168,6 @@ onUnmounted(() => {
 				>
 					<template v-if="$rColumns.length">
 						<Grid
-							:columnWidth="$_columnsWidth"
 							:readonly="readonly"
 							:fullHeight="fullHeight"
 							v-model:tableAPI="tableAPI"

@@ -10,6 +10,7 @@ import TimeScales from './TimeScale.vue';
 import { hotkeys } from '@svar-ui/grid-store';
 import { setID } from '@svar-ui/lib-dom';
 import { asDirective, subscribe } from '@svar-ui/lib-vue';
+import { createZoomWheelHandler } from '../../helpers/zoom';
 
 const vHotkeys = asDirective(hotkeys);
 
@@ -101,43 +102,11 @@ function dataRequest() {
 	});
 }
 
-let lastWheelTime = performance.now();
-const MAX_ZOOM_RATE = 0.003; // per ms
-function getZoomFactor(evDelta) {
-	const isTouchpad = Math.abs(evDelta) < 50; // or mouse with smooth scrolling
-	const SENSITIVITY = isTouchpad ? 0.004 : 0.01; // smaller - slower
-	const now = performance.now();
-	const dt = Math.min(now - lastWheelTime, 50);
-	lastWheelTime = now;
-	const normalized = clamp(
-		-evDelta * SENSITIVITY,
-		-MAX_ZOOM_RATE * dt,
-		MAX_ZOOM_RATE * dt
-	);
-	return Math.exp(normalized);
-}
-function clamp(value, min, max) {
-	return Math.max(Math.min(value, max), min);
-}
-let pending = false;
-function onWheel(e) {
-	if ($zoom.value && (e.ctrlKey || e.metaKey)) {
-		e.preventDefault();
-		const ratio = getZoomFactor(e.deltaY);
-		const offset = e.clientX - chart.value.getBoundingClientRect().left;
-		if (!pending) {
-			pending = true;
-			requestAnimationFrame(() => {
-				api.exec('zoom-scale', {
-					dir: ratio > 1 ? 1 : -1,
-					ratio: Math.abs(1 - ratio),
-					offset,
-				});
-				pending = false;
-			});
-		}
-	}
-}
+const onWheel = createZoomWheelHandler(
+	api,
+	() => $zoom.value,
+	() => chart.value
+);
 
 function getHoliday(cell) {
 	const style = $highlightTime.value?.(cell.date, cell.unit);
@@ -150,11 +119,7 @@ function getHoliday(cell) {
 }
 
 const holidays = computed(() => {
-	if (
-		($scales.value.minUnit !== 'hour' && $scales.value.minUnit !== 'day') ||
-		!$highlightTime.value
-	)
-		return null;
+	if (!$highlightTime.value) return null;
 	const cells = $scales.value.rows[$scales.value.rows.length - 1].cells;
 	return cells.slice($xArea.value.start, $xArea.value.end).map(getHoliday);
 });

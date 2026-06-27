@@ -14,6 +14,7 @@ const props = defineProps({
 const isGroup = computed(() => $groupBy.value?.field && props.row.$group);
 
 const groupValue = computed(() => {
+	if (!isGroup.value) return undefined;
 	const priorityMap = { 1: "low", 2: "medium", 3: "high" };
 	let value = props.row.$groupValue;
 	if (value && $groupBy.value.field === "priority") {

@@ -10,7 +10,7 @@ const props = defineProps({
 });
 
 const columns = [
-	{ id: "text", header: "Task", width: 220, cell: NameAndDateCell },
+	{ id: "text", header: "Task", flexgrow: 1, cell: NameAndDateCell },
 	{ id: "assigned", header: "Assigned", width: 160, cell: AvatarCell },
 	{
 		id: "add-task",
@@ -30,6 +30,7 @@ const data = getData();
 		:links="data.links"
 		:scales="data.scales"
 		:columns="columns"
+		:gridWidth="460"
 		:cellHeight="40"
 	/>
 </template>

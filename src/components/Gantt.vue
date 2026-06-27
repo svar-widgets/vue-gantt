@@ -14,6 +14,7 @@ import { EventBusRouter } from "@svar-ui/lib-state";
 import {
 	DataStore,
 	getDefaultColumns,
+	getDefaultGridWidth,
 	defaultTaskTypes,
 	normalizeZoom,
 } from "@svar-ui/gantt-store";
@@ -53,7 +54,7 @@ const props = defineProps({
 	cellWidth: { default: 100 },
 	cellHeight: { default: 38 },
 	scaleHeight: { default: 36 },
-	gridWidth: { default: 440 },
+	gridWidth: { default: null },
 	displayMode: { default: "all" },
 	readonly: { type: Boolean, default: false },
 	cellBorders: { default: "full" },
@@ -94,12 +95,21 @@ provide("wx-i18n", locale);
 // prepare configuration objects
 const { calendar: lCalendar } = locale.getRaw();
 
+// default column set (incl. auto-added resources/wbs columns) drives the
+// default grid width when none is provided by the user
+const defaultGridColumns = computed(() =>
+	getDefaultColumns({ resources: !!props.resources, wbs: props.wbs })
+);
+const resolvedGridWidth = computed(() =>
+	props.gridWidth ?? getDefaultGridWidth(defaultGridColumns.value)
+);
+
 const normalizedConfig = computed(() => {
 	let config = {
 		zoom: prepareZoom(props.zoom, lCalendar),
 		scales: prepareScales(props.scales, lCalendar),
 		columns: prepareColumns(
-			props.columns ?? getDefaultColumns({ resources: !!props.resources, wbs: props.wbs }),
+			props.columns ?? defaultGridColumns.value,
 			lCalendar
 		),
 		links: props.links,
@@ -254,7 +264,7 @@ const reinitStore = () => {
 		highlightTime: props.highlightTime,
 		wbs: props.wbs,
 		displayMode: props.displayMode,
-		gridWidth: props.gridWidth,
+		gridWidth: resolvedGridWidth.value,
 		cellBorders: props.cellBorders,
 		_compactMode: compactMode.value,
 	});

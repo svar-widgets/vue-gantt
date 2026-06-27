@@ -40,20 +40,15 @@ function reload() {
 	<div class="demo">
 		<div class="bar">
 			<Field label="Filter by Task name" class="field">
-				<template #default="{ id }">
-					<Text
-						:id="id"
-						clear
-						icon="wxi-search"
-						v-model:value="text"
-						:onchange="filterTasks"
-					/>
-				</template>
+				<Text
+					clear
+					icon="wxi-search"
+					v-model:value="text"
+					:onchange="filterTasks"
+				/>
 			</Field>
 			<Field label="Open tasks while filtering" class="field">
-				<template #default="{ id }">
-					<Switch :id="id" v-model:value="open" />
-				</template>
+				<Switch v-model:value="open" />
 			</Field>
 			<div class="reload-btn">
 				<Button type="primary" :onclick="reload">Reload</Button>
