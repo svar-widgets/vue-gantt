@@ -1,3 +1,9 @@
+## 2.7.2
+
+### Fixes
+
+-   Toolbar and context menu fail to render when no locale is provided
+
 ## 2.7.1
 
 ### Fixes

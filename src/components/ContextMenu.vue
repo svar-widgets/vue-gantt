@@ -37,7 +37,7 @@ if (!l) {
 	l = locale({ ...en, ...coreEn });
 	provide("wx-i18n", l);
 }
-const _ = inject("wx-i18n").getGroup("gantt");
+const _ = l.getGroup("gantt");
 
 const taskTypes = subscribeLater(() => props.api?.getReactiveState()?.taskTypes);
 const selected = subscribeLater(() => props.api?.getReactiveState()?.selected);

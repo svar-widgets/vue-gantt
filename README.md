@@ -6,7 +6,7 @@
 
 <div align="center">
 
-[Homepage](https://svar.dev/vue/gantt/) • [Getting Started](https://docs.svar.dev/vue/gantt/getting-started/quickstart/) • [Demos](https://docs.svar.dev/vue/gantt/samples/#/base/willow)
+[Homepage](https://svar.dev/vue/gantt/) • [Getting Started](https://docs.svar.dev/vue/gantt/getting_started/) • [Demos](https://docs.svar.dev/vue/gantt/samples/#/base/willow)
 
 </div>
 
@@ -96,7 +96,7 @@ const scales = [
 </template>
 ```
 
-For further instructions, follow the detailed [how-to-start guide](https://docs.svar.dev/vue/gantt/getting-started/quickstart/).
+For further instructions, follow the detailed [how-to-start guide](https://docs.svar.dev/vue/gantt/getting_started/).
 
 ### :star: Show Your Support
 

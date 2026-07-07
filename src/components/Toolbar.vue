@@ -24,7 +24,7 @@ if (!l) {
 	l = locale(en);
 	provide("wx-i18n", l);
 }
-const _ = inject("wx-i18n").getGroup("gantt");
+const _ = l.getGroup("gantt");
 
 const selected = subscribeLater(() => props.api?.getReactiveState()?._selected);
 const undo = subscribeLater(() => props.api?.getReactiveState()?.undo);
