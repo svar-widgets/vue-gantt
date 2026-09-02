@@ -29,7 +29,6 @@ const props = defineProps({
 });
 
 let activeId = null;
-const activeTask = ref(null);
 
 // set locale
 let l = inject("wx-i18n", null);
@@ -53,14 +52,7 @@ const config = computed(() => ({
 	group: !!groupBy().value?.field,
 }));
 
-// _selected lags behind single selection from resolver (setAsyncState)
-const tasks = computed(() =>
-	_selected().value?.length
-		? _selected().value
-		: activeTask.value
-			? [activeTask.value]
-			: []
-);
+const tasks = computed(() => _selected().value ?? []);
 
 const fullOptions = computed(() => getMenuOptions(config.value));
 
@@ -124,8 +116,6 @@ function itemResolver(id, ev) {
 		const result = props.resolver(id, ev);
 		task = result === true ? task : result;
 	}
-	activeTask.value = task;
-
 	if (task) {
 		const segmentIndex = locateID(ev.target, "data-segment");
 		if (segmentIndex !== null) activeId = { id: task.id, segmentIndex };

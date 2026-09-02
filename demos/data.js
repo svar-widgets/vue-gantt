@@ -79,11 +79,6 @@ function getGeneratedTasks(prefix, maxSize, maxYears) {
 	return tasks;
 }
 
-export function getGeneratedData(prefix, maxSize, maxYears) {
-	const tasks = getGeneratedTasks(prefix, maxSize, maxYears);
-	return { tasks, generatedLinks, scales };
-}
-
 const tasks = [
 	{
 		id: 1,
@@ -897,6 +892,11 @@ const scales = [
 	{ unit: "day", step: 1, format: "%j", css: dayStyle },
 ];
 
+export function getGeneratedData(prefix, maxSize, maxYears) {
+	const tasks = getGeneratedTasks(prefix, maxSize, maxYears);
+	return { tasks, generatedLinks, scales };
+}
+
 const tasksHour = [
 	{
 		id: 1,
@@ -1468,6 +1468,19 @@ function addDays(d, n) {
 	return new Date(new Date(d).setDate(d.getDate() + n));
 }
 
+const datasets = {
+	day: { tasks, links, scales },
+	hour: { tasks: tasksHour, links: linksHour, scales: scalesHour },
+	critical: { tasks: critTasks, links: critLinks, scales },
+	calendar: { tasks: calendarTasks, links, scales, calendars },
+	calendars: {
+		tasks: multiCalendarTasks,
+		links: multiCalendarLinks,
+		scales,
+		calendars,
+	},
+};
+
 export function getData(name, config) {
 	const data = datasets[name || "day"];
 
@@ -1530,19 +1543,6 @@ export function getData(name, config) {
 	}
 	return data;
 }
-
-const datasets = {
-	day: { tasks, links, scales },
-	hour: { tasks: tasksHour, links: linksHour, scales: scalesHour },
-	critical: { tasks: critTasks, links: critLinks, scales },
-	calendar: { tasks: calendarTasks, links, scales, calendars },
-	calendars: {
-		tasks: multiCalendarTasks,
-		links: multiCalendarLinks,
-		scales,
-		calendars,
-	},
-};
 
 export function getBaselinesData() {
 	const t = tasks.map(t => ({

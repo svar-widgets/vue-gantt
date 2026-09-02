@@ -11,7 +11,7 @@ const props = defineProps({
 
 <template>
 	<WillowDark v-if="$slots.default" :fonts="props.fonts">
-		<GridWillowDark><slot /></GridWillowDark>
+		<GridWillowDark :fonts="props.fonts"><slot /></GridWillowDark>
 	</WillowDark>
 	<template v-else>
 		<GridWillowDark :fonts="props.fonts" />
@@ -84,6 +84,9 @@ const props = defineProps({
 	--wx-grid-body-font-color: var(--wx-color-font);
 	--wx-grid-body-row-border: var(--wx-border);
 	--wx-grid-body-cell-border: 1px solid transparent;
+	--wx-grid-cell-padding-x: 12px;
+	--wx-grid-header-sort-padding-right: 4px;
+	--wx-grid-tree-column-padding-left: 3px;
 
 	/* timescale */
 	--wx-timescale-font: var(--wx-font-weight-md) var(--wx-font-size-sm)

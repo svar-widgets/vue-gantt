@@ -166,6 +166,8 @@ function onDeleteAction(id) {
 }
 
 function onEdit(id, column, value) {
+	if (column === "lag" && value !== "") value = value * 1;
+
 	const update = { [column]: value };
 	if (column === "type" && $schedule.value?.auto) {
 		if (value !== "e2s") update.lag = "";

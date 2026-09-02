@@ -35,6 +35,7 @@ import {
 	getSortMarks,
 	getResourceLoadColumns,
 	getScrollbarWidth,
+	getColumnStyle,
 } from "../../helpers/grid";
 import { createZoomWheelHandler } from "../../helpers/zoom";
 
@@ -364,7 +365,7 @@ onUnmounted(() => {
 									rowHeight: $cellHeight,
 									headerHeight: $rScales.height / $_headerLength,
 								}"
-								:columnStyle="col => `wx-text-${col.align}`"
+								:columnStyle="getColumnStyle"
 								:data="$rResources"
 								:columns="fitColumns"
 								:sortMarks="sortMarks"
@@ -500,7 +501,7 @@ onUnmounted(() => {
 }
 /*body*/
 .wx-resource-grid :deep(.wx-grid .wx-cell) {
-	padding: 0 5px;
+	padding: 0 var(--wx-grid-cell-padding-x);
 	height: 100%;
 	display: flex;
 	align-items: center;
@@ -517,6 +518,9 @@ onUnmounted(() => {
 }
 .wx-resource-grid :deep(.wx-grid .wx-body .wx-cell) {
 	border-right: var(--wx-grid-body-cell-border);
+}
+.wx-resource-grid :deep(.wx-grid .wx-body .wx-cell.wx-col-name) {
+	padding-left: var(--wx-grid-tree-column-padding-left);
 }
 .wx-resource-grid :deep(.wx-grid .wx-cell:has(input, .wx-value)) {
 	height: 100%;
@@ -535,10 +539,12 @@ onUnmounted(() => {
 	font: var(--wx-grid-header-font);
 	text-transform: var(--wx-grid-header-text-transform);
 	color: var(--wx-grid-header-font-color);
+}
+.wx-resource-grid :deep(.wx-grid .wx-header .wx-cell.wx-filter) {
 	padding: 0 5px;
 }
-.wx-resource-grid :deep(.wx-grid .wx-header .wx-cell:first-child) {
-	padding-left: 14px;
+.wx-resource-grid :deep(.wx-grid .wx-header .wx-cell:has(.wx-sort)) {
+	padding-right: var(--wx-grid-header-sort-padding-right);
 }
 .wx-resource-grid :deep(.wx-grid .wx-header .wx-cell .wx-text) {
 	width: 100%;
@@ -552,7 +558,6 @@ onUnmounted(() => {
 }
 .wx-resource-grid :deep(.wx-grid .wx-header .wx-cell.wx-text-center) {
 	text-align: center;
-	padding-left: 5px;
 }
 .wx-resource-grid
 	:deep(.wx-grid .wx-header .wx-cell.wx-text-right.wx-action) {

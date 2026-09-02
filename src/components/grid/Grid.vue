@@ -23,6 +23,7 @@ import {
 	getFillColumn,
 	getColumnsWidth,
 	getSortMarks,
+	getColumnStyle,
 } from "../../helpers/grid";
 
 const vReorder = asDirective(reorder);
@@ -303,6 +304,9 @@ const cols = computed(() => {
 			if (line.text) line.text = _(line.text);
 		});
 		col.header = header;
+		// in readonly mode we must disable column inline editors entirely.
+		// otherwise grid will open per-cell editors on dblclick.
+		col.editor = props.readonly ? null : col.editor;
 		return col;
 	});
 
@@ -353,15 +357,6 @@ watchEffect(
 	},
 	{ flush: "pre" }
 );
-
-function getColumnStyle(col) {
-	let style = `wx-text-${col.align} `;
-
-	if (col.id === "add-task") style += "wx-action ";
-	else if (col.id === "wbs") style += "wx-wbs ";
-
-	return style.trim();
-}
 
 // SIZES
 // --------
@@ -536,7 +531,7 @@ const gridSizes = computed(() => ({
 }
 /*body*/
 .wx-table :deep(.wx-grid .wx-cell) {
-	padding: 0 5px;
+	padding: 0 var(--wx-grid-cell-padding-x);
 	height: 100%;
 	display: flex;
 	align-items: center;
@@ -561,15 +556,20 @@ const gridSizes = computed(() => ({
 	height: 100%;
 	padding: 0;
 }
+.wx-table :deep(.wx-grid .wx-body .wx-cell.wx-col-text) {
+	padding-left: var(--wx-grid-tree-column-padding-left);
+}
 /*header*/
 .wx-table :deep(.wx-grid .wx-header .wx-cell) {
 	font: var(--wx-grid-header-font);
 	text-transform: var(--wx-grid-header-text-transform);
-	padding: 0 5px;
 	border-bottom-color: transparent;
 }
-.wx-table :deep(.wx-grid .wx-header .wx-cell:first-child) {
-	padding-left: 14px;
+.wx-table :deep(.wx-grid .wx-header .wx-cell.wx-filter) {
+	padding: 0 5px;
+}
+.wx-table :deep(.wx-grid .wx-header .wx-cell:has(.wx-sort)) {
+	padding-right: var(--wx-grid-header-sort-padding-right);
 }
 .wx-table :deep(.wx-grid .wx-header .wx-cell .wx-text) {
 	width: 100%;
@@ -582,7 +582,6 @@ const gridSizes = computed(() => ({
 }
 .wx-table :deep(.wx-grid .wx-header .wx-cell.wx-text-center) {
 	text-align: center;
-	padding-left: 5px;
 }
 .wx-table :deep(.wx-grid .wx-header .wx-cell.wx-text-center.wx-action) {
 	justify-content: center;
@@ -590,9 +589,7 @@ const gridSizes = computed(() => ({
 .wx-table :deep(.wx-grid .wx-header .wx-cell.wx-text-right.wx-action) {
 	justify-content: right;
 }
-.wx-table :deep(.wx-grid .wx-row .wx-cell.wx-wbs) {
-	padding: 0 14px;
-}
+
 /*drag element*/
 .wx-table :deep(.wx-grid .wx-reorder-task.wx-row) {
 	width: 100%;

@@ -1,6 +1,6 @@
 {
   "name": "@svar-ui/vue-gantt",
-  "version": "2.7.2",
+  "version": "2.7.3",
   "description": "SVAR Vue Gantt library",
   "productTag": "gantt",
   "productTrial": true,
@@ -36,29 +36,29 @@
     "dist-full/index.css"
   ],
   "dependencies": {
-    "@svar-ui/core-locales": "2.6.0",
-    "@svar-ui/gantt-locales": "2.7.1",
-    "@svar-ui/gantt-store": "2.7.1",
-    "@svar-ui/grid-store": "2.7.1",
-    "@svar-ui/lib-dom": "0.13.1",
+    "@svar-ui/core-locales": "2.6.1",
+    "@svar-ui/gantt-locales": "2.7.2",
+    "@svar-ui/gantt-store": "2.7.2",
+    "@svar-ui/grid-store": "2.7.3",
+    "@svar-ui/lib-dom": "0.14.0",
     "@svar-ui/lib-state": "1.9.7",
     "@svar-ui/lib-vue": "1.1.0",
-    "@svar-ui/vue-core": "2.6.0",
-    "@svar-ui/vue-editor": "2.6.0",
-    "@svar-ui/vue-grid": "2.7.2",
-    "@svar-ui/vue-menu": "2.6.0",
-    "@svar-ui/vue-toolbar": "2.6.0"
+    "@svar-ui/vue-core": "2.6.1",
+    "@svar-ui/vue-editor": "2.6.1",
+    "@svar-ui/vue-grid": "2.7.3",
+    "@svar-ui/vue-menu": "2.6.1",
+    "@svar-ui/vue-toolbar": "2.6.1"
   },
   "peerDependencies": {
     "vue": "^3.0.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.1",
-    "@svar-ui/gantt-data-provider": "2.7.0",
-    "@svar-ui/vue-comments": "2.6.0",
+    "@svar-ui/gantt-data-provider": "2.7.2",
+    "@svar-ui/vue-comments": "2.6.1",
     "@svar-ui/vue-excel-import": "2.6.0",
-    "@svar-ui/vue-filter": "2.6.0",
-    "@svar-ui/vue-tasklist": "2.6.0",
+    "@svar-ui/vue-filter": "2.6.1",
+    "@svar-ui/vue-tasklist": "2.6.1",
     "eslint": "^9.35.0",
     "eslint-plugin-vue": "^10.5.1",
     "globals": "^16.5.0",

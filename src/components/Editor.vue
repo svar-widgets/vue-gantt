@@ -427,6 +427,11 @@ function onTabChange(ev) {
 		padding-left: 0;
 		padding-right: 0;
 	}
+	/* temp: vue-toolbar 2.6.1 stretches every .wx-tb-element under a
+	   column toolbar, which also hits the ones inside row groups */
+	& :global(.wx-tb-group:not(.wx-column) > .wx-tb-body > .wx-tb-element) {
+		width: auto;
+	}
 	& :global(.wx-gantt-tabs) {
 		align-self: start;
 	}

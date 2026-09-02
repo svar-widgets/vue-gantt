@@ -25,6 +25,7 @@ const count = computed(() => props.data.length);
 .wx-avatar-box {
 	display: flex;
 	align-items: center;
+	padding-left: calc(var(--wx-grid-cell-padding-x) - 9px);
 }
 .wx-resource-option {
 	display: flex;

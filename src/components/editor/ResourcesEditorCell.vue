@@ -24,7 +24,7 @@ const item = computed(() => props.data || props.row);
 
 <style scoped>
 .wx-avatar {
-	margin: 0 10px 0 4px;
+	margin: 0 10px 0 0;
 }
 .wx-role {
 	font-size: 12px;
