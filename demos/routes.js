@@ -188,7 +188,7 @@ export const links = [
 	["/rollups/:skin", "Rollups", Rollups, "ProRollups", { pro: true }],
 	["/templates/:skin", "Custom text", GanttText, "GanttText"],
 	["/tooltips/:skin", "Tooltips", GanttTooltips, "GanttTooltips"],
-	["/wbs/:skin", "WBS codes", WBS, "WBS", { pro: true }],
+	["/wbs/:skin", "WBS codes", WBS, "ProWBS", { pro: true }],
 
 	{ group: "Data operations" },
 	[
@@ -284,7 +284,7 @@ export const links = [
 		"/resources/:skin",
 		"Resources",
 		Resources,
-		"ProBasicResources",
+		"ProResources",
 		{ pro: true },
 	],
 	[
@@ -334,14 +334,14 @@ export const links = [
 		"/export/:skin",
 		"Export data (server-side)",
 		Export,
-		"Export",
+		"ProExport",
 		{ pro: true },
 	],
 	[
 		"/msp/:skin",
 		"Import / export to MS Project (client-side)",
 		MSProject,
-		"MSProject",
+		"ProMSProject",
 		{ pro: true },
 	],
 

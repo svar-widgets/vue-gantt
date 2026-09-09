@@ -1,3 +1,9 @@
+## 2.7.4
+
+### Fixes
+
+-   Grid and chart rows get out of sync after indent / outdent operations
+
 ## 2.7.3
 
 ### Fixes

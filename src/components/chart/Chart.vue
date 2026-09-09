@@ -77,6 +77,9 @@ watch([$rScrollTop, chartHeight, $cellHeight], () => {
 const chartGridHeight = computed(() => Math.max(chartHeight.value, props.fullHeight));
 
 watchEffect(() => {
+	// access the values to track them as dependencies
+	chartGridHeight.value;
+	chartHeight.value;
 	if (chart.value) {
 		chart.value.scrollTop = $rScrollTop.value;
 		chart.value.scrollLeft = $rScrollLeft.value;
