@@ -12,11 +12,34 @@ import type {
 	IApi,
 	IConfig,
 	ITask,
+	ILink,
+	IResource,
 	IGanttColumn,
+	IResourceColumn,
+	IResourceLoad,
+	IResourceHistogramConfig,
+	IResourceHistogramTooltip,
+	ISCurveTooltip,
+	TID,
 } from "@svar-ui/gantt-store";
 
 export * from "@svar-ui/gantt-store";
 export { registerEditorItem } from "@svar-ui/vue-editor";
+
+export declare const version: string;
+
+export interface ILocatedTask {
+	id: TID;
+	node: Element;
+}
+
+export declare function locateTask(
+	ev:
+		| MouseEvent
+		| DragEvent
+		| { target?: EventTarget | null; clientY?: number },
+	api?: IApi
+): ILocatedTask | null;
 
 export interface IColumnConfig extends Omit<IGanttColumn, "header"> {
 	cell?: ITableColumn["cell"];
@@ -39,7 +62,7 @@ export declare const Gantt: VueComponent<
 		cellBorders?: "column" | "full";
 		highlightTime?: (date: Date, unit: "day" | "hour") => string;
 		init?: (api: IApi) => void;
-	} & IConfig &
+	} & Omit<IConfig, "columns"> &
 		GanttActions<TMethodsConfig>
 >;
 
@@ -67,15 +90,35 @@ export declare const Editor: VueComponent<
 	}
 >;
 
+type TooltipContentData =
+	| { task: ITask; segmentIndex: number | null; violated?: boolean }
+	| { constraint: ITask; violated?: boolean }
+	| { link: ILink }
+	| { rollup: ITask }
+	| { resource: IResource }
+	| { histogram: IResourceHistogramTooltip }
+	| { sCurve: ISCurveTooltip }
+	| { deadline: ITask };
+
 export declare const Tooltip: VueComponent<{
 	content?: VueComponent<{
-		data: ITask;
+		data: TooltipContentData;
 	}>;
 	api?: IApi;
 }>;
 
-export declare const Fullscreen: VueComponent<{
-	hotkey?: string;
+export declare const ResourceLoad: VueComponent<{
+	api?: IApi;
+	columns?: false | IResourceColumn[];
+	mode?: "utilization" | "histogram";
+	histogram?: IResourceHistogramConfig;
+	template?: (load: IResourceLoad) => string;
+	draggableRows?: boolean | ((row: IResource) => boolean);
+}>;
+
+export declare const ConflictReport: VueComponent<{
+	api?: IApi;
+	onclose?: () => void;
 }>;
 
 export declare const Willow: VueComponent<{

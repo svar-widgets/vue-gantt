@@ -1,10 +1,24 @@
 <script setup>
 defineOptions({ name: "GanttGridGrid" });
 
-import { ref, computed, inject, watch, watchEffect, onMounted, onUnmounted, onWatcherCleanup } from "vue";
+import {
+	ref,
+	computed,
+	inject,
+	watch,
+	watchEffect,
+	onMounted,
+	onUnmounted,
+} from "vue";
 import { locateID } from "@svar-ui/lib-dom";
-import { reorder } from "../../helpers/reorder";
-import { prepareEditTask } from "@svar-ui/gantt-store";
+import { reorder, followReorder } from "../../helpers/reorder";
+import {
+	prepareEditTask,
+	setTaskResources,
+	getHeaderLength,
+	isPlaceholder,
+	getPlaceholderTask,
+} from "@svar-ui/gantt-store";
 import { asDirective, subscribe } from "@svar-ui/lib-vue";
 
 import { Grid } from "@svar-ui/vue-grid";
@@ -12,7 +26,6 @@ import TextCell from "./TextCell.vue";
 import ActionCell from "./ActionCell.vue";
 import ResourcesCell from "./ResourcesCell.vue";
 import EditorResourcesCell from "./EditorResourcesCell.vue";
-import { setTaskResources } from "../../helpers/setTaskResources.js";
 
 import {
 	getGridMinHeight,
@@ -27,12 +40,16 @@ import {
 } from "../../helpers/grid";
 
 const vReorder = asDirective(reorder);
+const vFollowReorder = asDirective(followReorder);
 
 const props = defineProps({
 	readonly: {},
+	section: { default: "grid" },
 });
 
 const tableAPI = defineModel("tableAPI");
+
+const isSubGrid = computed(() => props.section === "subGrid");
 
 const locale = inject("wx-i18n");
 const _ = locale.getGroup("gantt");
@@ -46,16 +63,20 @@ const {
 	area,
 	_tasks: rTasks,
 	_scales: scales,
-	_headerLength,
-	columns: columnsStore,
+	_columns,
 	_sort: sort,
 	durationUnit,
+	inclusiveEnd,
 	splitTasks,
+	unscheduledTasks,
+	inactiveTasks,
 	filterValues: filterValuesStore,
 	groupBy,
 	gridWidth: gridWidthStore,
-	displayMode,
+	subGridWidth,
+	_displayPanels,
 	_compactMode,
+	_columnsWidth,
 } = api.getReactiveState();
 
 const $scrollTop = subscribe(scrollTop);
@@ -64,26 +85,39 @@ const $selected = subscribe(selected);
 const $area = subscribe(area);
 const $rTasks = subscribe(rTasks, true);
 const $scales = subscribe(scales);
-const $_headerLength = subscribe(_headerLength);
-const $columns = subscribe(columnsStore);
+const $_columns = subscribe(_columns);
 const $sort = subscribe(sort);
 const $durationUnit = subscribe(durationUnit);
+const $inclusiveEnd = subscribe(inclusiveEnd);
 const $splitTasks = subscribe(splitTasks);
+const $unscheduledTasks = subscribe(unscheduledTasks);
+const $inactiveTasks = subscribe(inactiveTasks);
 const $filterValues = subscribe(filterValuesStore);
 const $groupBy = subscribe(groupBy);
 const $gridWidth = subscribe(gridWidthStore);
-const $displayMode = subscribe(displayMode);
+const $subGridWidth = subscribe(subGridWidth);
+const $_displayPanels = subscribe(_displayPanels);
 const $_compactMode = subscribe(_compactMode);
+const $_columnsWidth = subscribe(_columnsWidth);
 
-let dragTask = ref(null);
+const panelWidth = computed(() =>
+	isSubGrid.value ? $subGridWidth.value : $gridWidth.value
+);
+const fillRemaining = computed(
+	() => isSubGrid.value && !$_displayPanels.value.includes("chart")
+);
+
+const dragTask = ref(null);
 
 const columnWidth = ref(0);
 
 function execAction(id, action) {
+	// no task behind the placeholder to target
+	if (isPlaceholder(id)) return;
 	if (action === "add-task") {
 		api.exec(action, {
 			target: id,
-			task: { text: _("New Task") },
+			task: { text: _("New task") },
 			mode: "child",
 			show: true,
 			focus: id ? "grid" : null,
@@ -93,6 +127,16 @@ function execAction(id, action) {
 		if (task.data || task.lazy)
 			api.exec(action, { id, mode: !task.open });
 	}
+}
+
+function createPlaceholder(task) {
+	const ev = {
+		task: getPlaceholderTask(task, _("New task")),
+		show: true,
+		eventSource: "placeholder",
+	};
+	api.exec("add-task", ev);
+	return ev.id;
 }
 
 function onClick(e) {
@@ -109,7 +153,7 @@ function onClick(e) {
 				toggle: e.ctrlKey || e.metaKey,
 				range: e.shiftKey,
 				show: "xy",
-				focus: "grid",
+				focus: isSubGrid.value ? "subGrid" : "grid",
 			});
 		}
 	} else if (action === "add-task") {
@@ -120,9 +164,11 @@ function onClick(e) {
 function onDblClick(e) {
 	if (!props.readonly) {
 		const id = locateID(e);
+		if (isPlaceholder(id)) return;
 		const column = locateID(e, "data-col-id");
 		const columnObj = column && cols.value.find(c => c.id === column);
-		if (!columnObj?.editor && id) api.exec("show-editor", { id });
+		if (!columnObj?.editor && id && !isSubGrid.value)
+			api.exec("show-editor", { id });
 	}
 }
 
@@ -140,7 +186,7 @@ function reorderTasks(detail) {
 			const task = allTasks.value[targetIndex];
 			if (index - targetIndex === 1) {
 				mode = "before";
-			} else if (task.data && task.open) {
+			} else if (!$groupBy.value?.field && task.data && task.open) {
 				mode = "before";
 				target = task.data[0].id;
 			}
@@ -157,7 +203,11 @@ function reorderTasks(detail) {
 }
 
 function startReorder({ id }) {
-	if (props.readonly) return false;
+	if (props.readonly || isSubGrid.value) return false;
+	if ($groupBy.value?.field) {
+		const task = api.getTask(id);
+		if (task.$group || task.data) return false;
+	}
 
 	if (api.getTask(id).open) api.exec("open-task", { id, mode: false });
 
@@ -199,7 +249,7 @@ const tableContainer = ref(null);
 function handleHotkey(ev) {
 	const { key, isInput } = ev;
 	if (!isInput && (key === "arrowup" || key === "arrowdown")) {
-		ev.eventSource = "grid";
+		ev.eventSource = isSubGrid.value ? "subGrid" : "grid";
 		api.exec("hotkey", ev);
 		return false;
 	} else if (key === "enter") {
@@ -266,28 +316,47 @@ function init(tapi) {
 		const task = tasks.value.find(t => t.id === id);
 		if (task) {
 			if (column === "resources") {
-				setTaskResources(id, value, api);
+				if (task.$placeholder) {
+					const history = api.getHistory();
+					if (history) history.startBatch();
+					const newId = createPlaceholder(task);
+					if (newId) setTaskResources(newId, value, api);
+					if (history) history.endBatch();
+				} else setTaskResources(id, value, api);
 				return;
 			}
 
-			const update = { ...task };
 			let v = value;
-			if (v && !isNaN(v) && !(v instanceof Date)) v *= 1;
-			update[column] = v;
+			if (
+				typeof v !== "boolean" &&
+				v &&
+				!isNaN(v) &&
+				!(v instanceof Date)
+			)
+				v *= 1;
+			const update = { ...task };
+			const col = $_columns.value.find(c => c.id === column);
+			if (col?.setter) col.setter(update, v);
+			else update[column] = v;
 			prepareEditTask(
 				update,
 				{
 					durationUnit: $durationUnit.value,
 					splitTasks: $splitTasks.value,
+					unscheduledTasks: $unscheduledTasks.value,
 				},
 				api.getTaskCalendar(update),
 				column
 			);
 
-			api.exec("update-task", {
-				id: id,
-				task: update,
-			});
+			if (task.$placeholder) {
+				createPlaceholder(update);
+			} else {
+				api.exec("update-task", {
+					id: id,
+					task: update,
+				});
+			}
 		}
 		return false;
 	});
@@ -297,7 +366,9 @@ function init(tapi) {
 // --------
 
 const cols = computed(() => {
-	let colsArr = $columns.value.map(col => {
+	// end-like column getters read the mode: new columns redraw the cells
+	$inclusiveEnd.value;
+	let colsArr = $_columns.value.map(col => {
 		col = { ...col };
 		const header = [...col.header];
 		header.forEach(line => {
@@ -332,7 +403,7 @@ const cols = computed(() => {
 			};
 		}
 	}
-	if (ai !== -1) {
+	if (ai !== -1 && !isSubGrid.value) {
 		colsArr[ai].cell = colsArr[ai].cell || ActionCell;
 		const header = colsArr[ai].header[0];
 		colsArr[ai].header[0].cell = header.cell || ActionCell;
@@ -347,6 +418,7 @@ const cols = computed(() => {
 		}
 	}
 
+	colsArr = colsArr.filter(c => (c.section || "grid") === props.section);
 	if (colsArr.length > 0) colsArr[colsArr.length - 1].resize = false;
 	return colsArr;
 });
@@ -363,22 +435,37 @@ watchEffect(
 const scrollDelta = computed(() => $area.value.from);
 const headerHeight = computed(() => $scales.value.height);
 const flexBasis = computed(() =>
-	getFlexBasis($columns.value, $displayMode.value, $gridWidth.value)
+	getFlexBasis(
+		$_columns.value,
+		$_displayPanels.value,
+		panelWidth.value,
+		props.section,
+		fillRemaining.value
+	)
 );
 const scrollX = computed(() =>
 	getScrollX(
 		$_compactMode.value,
-		$displayMode.value,
+		$_displayPanels.value,
 		columnWidth.value,
 		gridClientWidth.value,
-		$gridWidth.value
+		panelWidth.value,
+		props.section,
+		fillRemaining.value
 	)
 );
 const tableHeight = computed(() =>
 	getGridMinHeight(gridClientHeight.value, $cellHeight.value)
 );
-const tableStyle = computed(() =>
-	tableHeight.value + getGridStyle($displayMode.value, columnWidth.value, scrollX.value)
+const tableStyle = computed(
+	() =>
+		tableHeight.value +
+		getGridStyle(
+			$_displayPanels.value,
+			columnWidth.value,
+			scrollX.value,
+			props.section
+		)
 );
 
 // --------
@@ -390,10 +477,14 @@ const sel = computed(() => $selected.value.map(o => o.id));
 // TASKS
 // --------
 const tasks = computed(() => $rTasks.value.slice($area.value.start, $area.value.end));
+const reorderTask = computed(() =>
+	isSubGrid.value ? $rTasks.value.find(task => task.$reorder) : null
+);
 const allTasks = computed(() => {
+	const extra = dragTask.value || reorderTask.value;
 	const rows =
-		dragTask.value && !tasks.value.find(t => t.id === dragTask.value.id)
-			? [...tasks.value, dragTask.value]
+		extra && !tasks.value.find(t => t.id === extra.id)
+			? [...tasks.value, extra]
 			: tasks.value;
 	return rows.map(t => ({ ...t }));
 });
@@ -406,8 +497,15 @@ const filters = computed(() => {
 });
 
 const fitColumns = computed(() =>
-	getFitColumns(cols.value, $displayMode.value)
+	getFitColumns(
+		cols.value,
+		$_displayPanels.value,
+		props.section,
+		"add-task",
+		$_columnsWidth.value
+	)
 );
+const visibleHeaderLength = computed(() => getHeaderLength(fitColumns.value));
 
 const bodyOffset = computed(() => scrollDelta.value - $scrollTop.value);
 
@@ -424,65 +522,86 @@ onMounted(() => {
 		resizeObserver.observe(tableContainer.value);
 	}
 });
-onUnmounted(() => {
-	resizeObserver?.disconnect();
-});
 
-let pending = false;
+let focusFrame;
 const $focusTask = subscribe(focusTask);
-watch($focusTask, (value) => {
+watch($focusTask, value => {
 	if (!value) return;
-	const { id, column } = value;
-	// focus a new cell
-	if (column) {
-		if (!pending) {
-			pending = true;
-			requestAnimationFrame(() => {
-				const { focusCell, editor } = tableAPI.value.getState();
-				if (!editor) {
-					tableAPI.value.exec("focus-cell", {
-						row: id,
-						column: focusCell?.column || cols.value[0]?.id,
-					});
-					pending = false;
-				}
+	const { id, section } = value;
+	if (section !== (isSubGrid.value ? "subGrid" : "grid")) return;
+	if (focusFrame) return;
+	focusFrame = requestAnimationFrame(() => {
+		focusFrame = 0;
+		const { focusCell, editor } = tableAPI.value.getState();
+		if (!editor) {
+			tableAPI.value.exec("focus-cell", {
+				row: id,
+				column: focusCell?.column || cols.value[0]?.id,
 			});
 		}
-	}
+	});
 });
 
-const reorderConfig = computed(() => ({
-	isDisabled: () => !!$groupBy.value?.field,
+onUnmounted(() => {
+	resizeObserver?.disconnect();
+	if (focusFrame) cancelAnimationFrame(focusFrame);
+	tableAPI.value = null;
+});
+
+const reorderConfig = {
 	start: startReorder,
 	end: endReorder,
 	move: moveReorder,
 	getTask: api.getTask,
-}));
+};
+const followReorderConfig = computed(() =>
+	isSubGrid.value ? { api } : null
+);
+
+const rowStyle = computed(() => {
+	const inactive = $inactiveTasks.value;
+	return row => {
+		let style = row.$placeholder
+			? "wx-placeholder-row"
+			: row.$reorder
+				? "wx-reorder-task"
+				: "";
+		if (inactive && row.inactive)
+			style += (style ? " " : "") + "wx-inactive-row";
+		return style;
+	};
+});
 
 const selectedRows = computed(() => [...sel.value]);
 const gridSizes = computed(() => ({
 	rowHeight: $cellHeight.value,
-	headerHeight: headerHeight.value / $_headerLength.value,
+	headerHeight: headerHeight.value / visibleHeaderLength.value,
 }));
 </script>
 
 <template>
 	<div
 		class="wx-table-container"
-		:style="{ flex: `0 0 ${flexBasis}` }"
+		:class="{ 'wx-table-container-subgrid': isSubGrid }"
+		:data-gantt-section="section"
+		:style="{
+			flex: `${fillRemaining ? '1 1' : '0 0'} ${flexBasis}`,
+			minWidth: '0',
+		}"
 		ref="tableContainer"
 	>
 		<div
 			:style="`${tableStyle}--wx-body-offset:${bodyOffset}px;`"
 			class="wx-table"
 			v-reorder="reorderConfig"
+			v-follow-reorder="followReorderConfig"
 			@click="onClick"
 			@dblclick="onDblClick"
 		>
 			<Grid
 				:init="init"
 				:sizes="gridSizes"
-				:rowStyle="row => (row.$reorder ? 'wx-reorder-task' : '')"
+				:rowStyle="rowStyle"
 				:columnStyle="getColumnStyle"
 				:data="allTasks"
 				:columns="fitColumns"
@@ -503,6 +622,11 @@ const gridSizes = computed(() => ({
 	overflow-y: hidden;
 	height: 100%;
 	box-sizing: content-box;
+}
+
+.wx-table-container-subgrid {
+	border-right: none;
+	border-left: var(--wx-gantt-border);
 }
 
 /*table*/
@@ -563,6 +687,8 @@ const gridSizes = computed(() => ({
 .wx-table :deep(.wx-grid .wx-header .wx-cell) {
 	font: var(--wx-grid-header-font);
 	text-transform: var(--wx-grid-header-text-transform);
+}
+.wx-table :deep(.wx-grid .wx-header .wx-h-row:not(:last-child) .wx-cell) {
 	border-bottom-color: transparent;
 }
 .wx-table :deep(.wx-grid .wx-header .wx-cell.wx-filter) {
@@ -595,10 +721,18 @@ const gridSizes = computed(() => ({
 	width: 100%;
 	background: var(--wx-background-alt);
 	border-top: var(--wx-grid-body-row-border);
+	z-index: 1;
 }
 .wx-table :deep(.wx-grid .wx-reorder-task.wx-selected) {
 	background: var(--wx-gantt-select-color);
 	border-top: transparent;
 	border-bottom: transparent;
+}
+.wx-table :deep(.wx-grid .wx-inactive-row.wx-row) {
+	color: var(--wx-gantt-inactive-color);
+}
+/*placeholder row*/
+.wx-table :deep(.wx-grid .wx-placeholder-row) {
+	color: var(--wx-color-font-disabled);
 }
 </style>

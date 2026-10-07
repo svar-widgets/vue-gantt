@@ -26,35 +26,58 @@ The library provides a lightweight, MIT-licensed core for building Gantt charts 
 <img src="https://svar.dev/images/github/basic-gantt-react.gif" alt="SVAR Vue Gantt Chart UI">
 </div>
 
-### Key Features
+### :sparkles: Key Features
 
+SVAR Vue Gantt component offers a strong foundation for project planning and task management applications:
+
+**Interactive & customizable timeline**
 -   Interactive drag-and-drop task editing
--   Task dependencies and hierarchical structure
+-   Task dependencies visualization
+-   Hierarchical structure
 -   Configurable timeline with flexible time scales
--   Customizable grid, task bars, and UI via CSS
--   Sorting and filtering (including natural language search)
--   Built-in tooltips, context menu, and toolbar
+-   Drag tasks from a backlog
 -   Zooming with scroll
+
+**Configurable grid**
+-   Sorting 
+-   Reordering tasks in the grid
+-   Custom columns set
+-   Custom HTML in grid cells
+-   In-cell editing of task details
+
+**Task interaction**
+-   Customizable task edit form
+-   Built-in toolbar and context menu
+-   Tooltips for taskbars and links
 -   Hotkeys support for common actions
--   High performance with virtual rendering for large datasets
+-   Filtering (including natural language search)
+
+**Data & performance**
+-   Virtual rendering for large datasets
+-   Dynamic loading of sub-tasks
+-   REST data binding with RestDataProvider
+-   Real-time updates from the server
+
+**UI & tooling**
 -   Light and dark themes
 -   Full TypeScript support
+-   [AI tools](https://docs.svar.dev/vue/gantt/ai-tools/) for AI-assisted development: MCP server, skills, context files
 
 ### :rocket: PRO Edition
 
-SVAR Vue Gantt is available in open-source and [PRO Editions](https://svar.dev/vue/gantt/#pro). The PRO Edition offers additional features and automation logic:
+SVAR Vue Gantt is available in open-source and [PRO Edition](https://svar.dev/vue/gantt/#pro). The PRO Edition offers additional features and automation logic:
 
--   Scheduling logic → auto-scheduling, critical path, slack, summary tasks automation
--   Resource management → resource assignment, workload visualization
--   Planning tools → baselines, markers
--   Calendar control → working-time calendar, individual calendars for tasks and resources
--   Advanced structure → rollups, split tasks, unscheduled tasks, WBS codes support
--   Workflow features → undo/redo
--   Data Export → PDF, PNG, Excel, MS Project import/export
+-   Scheduling logic → auto-scheduling (FS, SS, FF, SF, and lag), critical path, constraints (6 types), deadlines, manual and inactive tasks, slack, summary tasks automation
+-   Resource management → resource assignment (including drag-and-drop), resource-driven scheduling, load chart and histogram
+-   Planning tools → baselines, progress line, S-curve, vertical markers
+-   Calendar control → working days calendar (non-linear time scale), individual calendars for tasks and resources
+-   Advanced structure → task grouping, rollups, split tasks, unscheduled tasks, sub-grid panel, WBS codes support
+-   UX features → undo/redo
+-   Data export → PDF, PNG, Excel, MS Project import/export (including resources and assignments)
 
 Visit the [pricing page](https://svar.dev/vue/gantt/pricing/) for full feature comparison, licensing details, and **free trial**.
 
-Or [see the live demo](https://svar.dev/demos/vue/gantt/).
+Or [see the live demos](https://docs.svar.dev/vue/gantt/samples/#/base/willow) to try SVAR Vue Gantt's features in action.
 
 ### :hammer_and_wrench: How to Use
 

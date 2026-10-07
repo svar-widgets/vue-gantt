@@ -1,7 +1,7 @@
 <script setup>
 defineOptions({ name: "GanttEditorResources", inheritAttrs: false });
 
-import { inject, ref, computed, onUnmounted } from "vue";
+import { inject, ref, computed, watchEffect } from "vue";
 import { subscribe } from "@svar-ui/lib-vue";
 import { Button } from "@svar-ui/vue-core";
 
@@ -28,28 +28,20 @@ const { activeTask, resources, _assignments, assignments } =
 const $activeTask = subscribe(activeTask);
 const $resources = subscribe(resources);
 const $assignments = subscribe(assignments);
+const $_assignments = subscribe(_assignments, true);
 
 const gridApi = ref(undefined);
 const newRowId = ref(null);
-const taskResources = ref([]);
 
-function subscribeHandler(taskid) {
+// writable derived: recomputed from the store, can be overridden locally
+const taskResources = ref([]);
+watchEffect(() => {
+	void $_assignments.value;
 	taskResources.value =
 		props.taskAssignments ||
-		props.api.getTaskResources(taskid).map(r => {
+		props.api.getTaskResources($activeTask.value).map(r => {
 			return { ...r, resource: r.id, id: r.assignmentId };
 		});
-}
-
-const unsubscribers = [
-	activeTask.subscribe(v => {
-		subscribeHandler(v);
-	}),
-	_assignments.subscribe(() => subscribeHandler($activeTask.value)),
-];
-
-onUnmounted(() => {
-	for (const unsub of unsubscribers) unsub();
 });
 
 const allOptions = computed(() => {

@@ -6,6 +6,7 @@ import { ref, computed, watch, watchEffect, onMounted, onUnmounted, inject } fro
 import CellGrid from './CellGrid.vue';
 import Bars from './Bars.vue';
 import TimeScales from './TimeScale.vue';
+import SCurve from './SCurve.vue';
 
 import { hotkeys } from '@svar-ui/grid-store';
 import { setID } from '@svar-ui/lib-dom';
@@ -35,9 +36,10 @@ const {
 	groupBy,
 	xArea,
 	zoom,
-	_calendars,
 	_markers,
+	_progressLinePoints,
 	highlightTime,
+	schedule,
 } = api.getReactiveState();
 
 const $selected = subscribe(selected, true);
@@ -52,8 +54,9 @@ const $resources = subscribe(resources);
 const $area = subscribe(area);
 const $groupBy = subscribe(groupBy);
 const $xArea = subscribe(xArea);
-const $_calendars = subscribe(_calendars);
+const $_progressLinePoints = subscribe(_progressLinePoints);
 const $highlightTime = subscribe(highlightTime);
+const $schedule = subscribe(schedule);
 
 const chartHeight = ref(0);
 const chart = ref(null);
@@ -93,16 +96,14 @@ function onScroll() {
 
 function dataRequest() {
 	const clientHeight = chartHeight.value || 0;
+	if (!clientHeight) return;
+
 	const num = Math.ceil(clientHeight / $cellHeight.value) + 1;
 	const pos = Math.floor(($rScrollTop.value || 0) / $cellHeight.value);
 	const start = Math.max(0, pos - extraRows);
 	const end = pos + num + extraRows;
 	const from = start * $cellHeight.value;
-	api.exec('render-data', {
-		start,
-		end,
-		from,
-	});
+	api.exec('render-data', { start, end, from });
 }
 
 const onWheel = createZoomWheelHandler(
@@ -160,22 +161,26 @@ function getRowCalendars(task) {
 		});
 	}
 
-	const calendar = task.calendar ? api.getTaskCalendar(task) : undefined;
+	const calendar =
+		task.calendar || $schedule.value?.resourceCalendars
+			? api.getTaskCalendar(task)
+			: undefined;
 	return calendar ? [calendar] : [];
 }
 
 const rowHighlights = computed(() => {
 	const result = [];
-	if (!$_calendars.value) return result;
 	const globalCalendar = api.getCalendar();
 	visibleTasks.value.forEach((task, index) => {
 		const rowCalendars = getRowCalendars(task);
 		if (!rowCalendars.length) return;
 		timelineCells.value.forEach((cell, cellIndex) => {
 			const nonWorkingCalendars = rowCalendars.filter(
-				cal => !cal.isWorkingDay(cell.date)
+				cal => cal.noWorkingTime || !cal.isWorkingDay(cell.date)
 			);
-			const isRowWorkingDay = nonWorkingCalendars.length === 0;
+			// a resource group works while any of its members does
+			const isRowWorkingDay =
+				nonWorkingCalendars.length < rowCalendars.length;
 			const isGlobalHoliday =
 				globalCalendar && !globalCalendar.isWorkingDay(cell.date);
 
@@ -193,8 +198,9 @@ const rowHighlights = computed(() => {
 					.filter(Boolean);
 				css = ['wx-weekend', ...extra].join(' ');
 			}
-			if (isRowWorkingDay && isGlobalHoliday)
+			if (isRowWorkingDay && isGlobalHoliday) {
 				css = 'wx-weekend-override';
+			}
 
 			if (css) result.push({ ...cellConfig, css });
 		});
@@ -210,7 +216,6 @@ function handleHotkey(ev) {
 let ro;
 onMounted(() => {
 	if (chart.value) {
-		chartHeight.value = chart.value.clientHeight;
 		ro = new ResizeObserver(entries => {
 			for (const entry of entries) {
 				chartHeight.value = entry.target.clientHeight;
@@ -283,7 +288,21 @@ onUnmounted(() => {
 
 			<CellGrid />
 
+			<svg
+				v-if="$_progressLinePoints"
+				class="wx-progress-line"
+				:width="props.fullWidth"
+				:height="chartGridHeight || 0"
+			>
+				<polyline
+					class="wx-progress-line-path"
+					:points="$_progressLinePoints"
+				/>
+			</svg>
+
 			<Bars :readonly="props.readonly" :taskTemplate="props.taskTemplate" />
+
+			<SCurve />
 		</div>
 	</div>
 </template>
@@ -346,6 +365,21 @@ onUnmounted(() => {
 	height: 100%;
 	width: 100%;
 	position: absolute;
+}
+
+.wx-progress-line {
+	position: absolute;
+	top: 0;
+	left: 0;
+	pointer-events: none;
+	z-index: 4;
+	overflow: visible;
+}
+
+:global(.wx-progress-line-path) {
+	fill: none;
+	stroke: var(--wx-gantt-progress-line-color, #f5953b);
+	stroke-width: var(--wx-gantt-progress-line-width, 1);
 }
 
 .wx-weekend {

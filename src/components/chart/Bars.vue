@@ -7,15 +7,22 @@ import { locate, locateID, getID, setID } from "@svar-ui/lib-dom";
 import { subscribe } from "@svar-ui/lib-vue";
 import Links from "./Links.vue";
 import Rollups from "./Rollups.vue";
-import { Button } from "@svar-ui/vue-core";
-import { isSegmentMoveAllowed, extendDragOptions } from "@svar-ui/gantt-store";
 import BarSegments from "./BarSegments.vue";
+import { Button } from "@svar-ui/vue-core";
+import {
+	isSegmentMoveAllowed,
+	extendDragOptions,
+	calcScaleCellDate,
+	getDiffer,
+} from "@svar-ui/gantt-store";
+import { getUnitStart, getTaskAtRow } from "../../helpers/chart.js";
 
 const props = defineProps({
 	readonly: {},
 	taskTemplate: {},
 });
 
+const _ = inject("wx-i18n").getGroup("gantt");
 const api = inject("gantt-store");
 
 const {
@@ -30,11 +37,17 @@ const {
 	_rollups: rRollups,
 	focusTask,
 	criticalPath,
-	tree,
 	schedule,
 	splitTasks,
 	summary,
 	slack,
+	cellHeight,
+	unscheduledTasks,
+	inactiveTasks,
+	deadlines,
+	_conflicts: rConflicts,
+	placeholderRow,
+	durationUnit,
 } = api.getReactiveState();
 
 const _rTasks = subscribe(rTasks, true);
@@ -47,11 +60,34 @@ const _selected = subscribe(selected);
 const _rollups = subscribe(rollups);
 const _rRollups = subscribe(rRollups);
 const _criticalPath = subscribe(criticalPath);
-const _tree = subscribe(tree);
 const _schedule = subscribe(schedule);
 const _splitTasks = subscribe(splitTasks);
 const _summary = subscribe(summary);
 const _slack = subscribe(slack);
+const _cellHeight = subscribe(cellHeight);
+const _unscheduledTasks = subscribe(unscheduledTasks);
+const _inactiveTasks = subscribe(inactiveTasks);
+const _deadlines = subscribe(deadlines);
+const _rConflicts = subscribe(rConflicts, true);
+const _placeholderRow = subscribe(placeholderRow);
+const _durationUnit = subscribe(durationUnit);
+
+/** Hide constraint badge when it collides with the deadline marker. */
+const CONSTRAINT_DEADLINE_COLLISION = 48;
+
+const constraintViolated = computed(() => _rConflicts.value?.constraints);
+
+function isConstraintCompact(task) {
+	if (
+		typeof task.$x_constraint !== "number" ||
+		typeof task.$x_deadline !== "number"
+	)
+		return false;
+	return (
+		Math.abs(task.$x_constraint - task.$x_deadline) <
+		CONSTRAINT_DEADLINE_COLLISION
+	);
+}
 
 const tasks = computed(() =>
 	_rTasks.value
@@ -70,8 +106,11 @@ let ignoreNextClick = false;
 
 // link creation
 const linkFrom = ref(undefined);
+let linkValidator = null;
 // task moving
 const taskMove = ref(null);
+// task scheduling
+const taskSchedule = ref(null);
 let progressFrom = null;
 
 const selectedLinkId = ref(null);
@@ -85,12 +124,13 @@ const selectedLink = computed(
 const touched = ref(undefined);
 let touchTimer;
 
+const totalWidth = ref(0);
+const container = ref(null);
+
 function mousedown(e) {
 	if (e.button !== 0) return;
 
 	const node = locate(e);
-	if (!node) return;
-
 	down(node, e);
 }
 
@@ -104,13 +144,73 @@ function touchstart(e) {
 	}
 }
 
+function getTaskAtY(
+	clientY,
+	rect = container.value.getBoundingClientRect()
+) {
+	return getTaskAtRow(_rTasks.value, clientY - rect.top, _cellHeight.value);
+}
+
+function canScheduleTask(task) {
+	if (!task) return false;
+	if (task.$placeholder) return _placeholderRow.value;
+	return (
+		_unscheduledTasks.value &&
+		task.unscheduled &&
+		(task.type === "task" || task.type === "milestone") &&
+		!task.$group
+	);
+}
+
+function isScheduleWorkingDay(task, left) {
+	const date = calcScaleCellDate(left, api.getState());
+	const calendar = api.getTaskCalendar(task);
+	if (calendar) return calendar.isWorkingDay(date);
+
+	return true;
+}
+
+function getUnitStartY(y) {
+	return Math.trunc(y / _cellHeight.value) * _cellHeight.value;
+}
+
 function down(node, point) {
-	const { clientX } = point;
-	const id = getID(node);
-	const task = api.getTask(id);
-	const css = point.target.classList;
+	const { clientX, clientY } = point;
 	if (point.target.closest(".wx-delete-button")) return;
 	if (!props.readonly) {
+		if (!node && (_unscheduledTasks.value || _placeholderRow.value)) {
+			const rowTask = getTaskAtY(clientY);
+			const rect = container.value.getBoundingClientRect();
+			const left = getUnitStart(
+				clientX - rect.left,
+				lengthUnitWidth.value
+			);
+			if (
+				canScheduleTask(rowTask) &&
+				isScheduleWorkingDay(rowTask, left)
+			) {
+				const isMilestone = rowTask && rowTask.type === "milestone";
+				taskSchedule.value = {
+					x: left,
+					cx: left,
+					left: isMilestone ? left - rowTask.$h / 2 : left,
+					y: rowTask
+						? rowTask.$y
+						: getUnitStartY(clientY - rect.top) + 3,
+					h: rowTask ? rowTask.$h : _cellHeight.value - 7,
+					w: isMilestone ? rowTask.$h : lengthUnitWidth.value,
+					task: rowTask,
+					isMilestone,
+				};
+				startDrag();
+				return;
+			}
+		}
+		if (!node) return;
+
+		const id = getID(node);
+		const task = api.getTask(id);
+		const css = point.target.classList;
 		if (css.contains("wx-progress-marker")) {
 			const { progress } = api.getTask(id);
 			progressFrom = {
@@ -150,7 +250,9 @@ function down(node, point) {
 function getMoveMode(node, e, task) {
 	if (e.target.classList.contains("wx-line")) return "";
 	if (!task) task = api.getTask(getID(node));
-	if (task.type === "milestone" || task.type === "summary") return "";
+	if (task.type === "milestone") return "";
+	if (task.type === "summary" && !(_schedule.value?.auto && task.manual))
+		return "";
 
 	const segmentNode = locate(e, "data-segment");
 	if (segmentNode) node = segmentNode;
@@ -178,7 +280,7 @@ function mousemove(e) {
 }
 
 function move(e, point) {
-	const { clientX } = point;
+	const { clientX, clientY } = point;
 
 	if (!props.readonly) {
 		if (progressFrom) {
@@ -249,6 +351,33 @@ function move(e, point) {
 				return up();
 			}
 			taskMove.value.start = true;
+		} else if (taskSchedule.value) {
+			const { isMilestone, x, w, cx } = taskSchedule.value;
+			const rect = container.value.getBoundingClientRect();
+			const current = getUnitStart(
+				clientX - rect.left,
+				lengthUnitWidth.value
+			);
+
+			// same cell, do nothing
+			if (current === cx) return;
+
+			if (isMilestone) {
+				taskSchedule.value = {
+					...taskSchedule.value,
+					cx: current,
+					left: current - w / 2,
+				};
+
+				return;
+			}
+
+			taskSchedule.value = {
+				...taskSchedule.value,
+				cx: current,
+				left: Math.min(current, x),
+				w: Math.abs(current - x) + lengthUnitWidth.value,
+			};
 		} else {
 			const taskNode = locate(e);
 			if (taskNode) {
@@ -258,6 +387,17 @@ function move(e, point) {
 				const mode = getMoveMode(barNode, point, task);
 				barNode.style.cursor =
 					mode && !props.readonly ? "col-resize" : "pointer";
+			} else if (_unscheduledTasks.value || _placeholderRow.value) {
+				const rowTask = getTaskAtY(clientY);
+				const left = getUnitStart(
+					clientX - container.value.getBoundingClientRect().left,
+					lengthUnitWidth.value
+				);
+				container.value.style.cursor =
+					canScheduleTask(rowTask) &&
+					isScheduleWorkingDay(rowTask, left)
+						? "crosshair"
+						: "";
 			}
 		}
 	}
@@ -328,14 +468,42 @@ function up() {
 		}
 
 		endDrag();
+	} else if (taskSchedule.value) {
+		const { left, w, task, isMilestone } = taskSchedule.value;
+		const state = api.getState();
+		const start = calcScaleCellDate(
+			isMilestone ? left + w / 2 : left,
+			state
+		);
+		const end = calcScaleCellDate(left + w, state);
+		const differ = getDiffer(_durationUnit.value, api.getCalendar());
+		const dates = isMilestone
+			? { start, duration: 0 }
+			: { start, duration: Math.max(1, differ(end, start)) };
+		if (task.$placeholder) {
+			api.exec("add-task", {
+				task: {
+					...dates,
+					text: _("New task"),
+					type: "task",
+					eventSource: "placeholder",
+				},
+			});
+		} else api.exec("update-task", { id: task.id, task: dates });
+
+		taskSchedule.value = null;
+		ignoreNextClick = true;
+		endDrag();
 	}
 }
 
 function startDrag() {
 	document.body.style.userSelect = "none";
+	if (container.value) container.value.style.cursor = "";
 }
 function endDrag() {
 	document.body.style.userSelect = "";
+	if (container.value) container.value.style.cursor = "";
 }
 
 function onDblClick(e) {
@@ -362,14 +530,14 @@ function onClick(e) {
 		if (css.contains("wx-link")) {
 			const toStart = css.contains("wx-left");
 			if (!linkFrom.value) {
+				linkValidator = _schedule.value.auto
+					? api.getLinkValidator()
+					: null;
 				linkFrom.value = { id, start: toStart };
 				return;
 			}
 
-			if (
-				linkFrom.value.id !== id &&
-				!alreadyLinked(id, toStart)
-			) {
+			if (isLinkTarget(id, toStart)) {
 				api.exec("add-link", {
 					link: {
 						source: linkFrom.value.id,
@@ -406,6 +574,30 @@ function slackStyle(task) {
 	return `left:${task.$x_slack}px;top:${task.$y}px;width:${task.$w_slack}px;height:${task.$h}px;`;
 }
 
+function scheduleStyle(task) {
+	return `left:${task.left}px;top:${task.y}px;width:${task.w}px;height:${task.h}px;`;
+}
+
+function deadlineStyle(task) {
+	return `left:${task.$x_deadline}px;top:${task.$y}px;height:${task.$h}px;`;
+}
+
+function constraintStyle(task) {
+	return `left:${task.$x_constraint}px;top:${task.$y - 2}px;height:${
+		task.$h + 4
+	}px;`;
+}
+
+// Arrow points into the open side. Floors open right, ceilings open left.
+// Must-start / must-finish are pins and have no arrow. mso still keeps the badge on the left.
+function isMustConstraint(type) {
+	return type === "mso" || type === "mfo";
+}
+
+function constraintOpensRight(type) {
+	return type === "snet" || type === "fnet" || type === "mso";
+}
+
 function contextmenu(ev) {
 	if (touched.value || touchTimer) {
 		ev.preventDefault();
@@ -418,24 +610,27 @@ function getLinkType(fromStart, toStart) {
 	return types[(fromStart ? 1 : 0) + (toStart ? 0 : 2)];
 }
 
-function alreadyLinked(target, toStart) {
-	const source = linkFrom.value.id;
-	const fromStart = linkFrom.value.start;
-
-	if (target === source) return true;
-
-	return _rLinks.value.find(l => {
-		return (
-			l.target === target &&
-			l.source === source &&
-			l.type === getLinkType(fromStart, toStart)
-		);
+const linkedFrom = computed(() => {
+	if (!linkFrom.value) return null;
+	const out = new Map();
+	_rLinks.value.forEach(l => {
+		if (l.source !== linkFrom.value.id) return;
+		if (!out.has(l.target)) out.set(l.target, new Set());
+		out.get(l.target).add(l.type);
 	});
+	return out;
+});
+
+function alreadyLinked(target, toStart) {
+	if (target === linkFrom.value.id) return true;
+	const type = getLinkType(linkFrom.value.start, toStart);
+	return !!linkedFrom.value.get(target)?.has(type);
 }
 
 function removeLinkMarker() {
 	if (linkFrom.value) {
 		linkFrom.value = null;
+		linkValidator = null;
 	}
 }
 
@@ -456,10 +651,7 @@ function forward(ev) {
 	api.exec(ev.action, ev.data);
 }
 
-const totalWidth = ref(0);
-
 // focus selected
-const container = ref(null);
 const hasFocus = computed(
 	() =>
 		_selected.value.length &&
@@ -472,7 +664,7 @@ const focused = computed(
 
 const _focusTask = subscribe(focusTask);
 watch(_focusTask, value => {
-	if (value && value.column === false) {
+	if (value && (!value.section || value.section === "chart")) {
 		const { id } = value;
 		const node = container.value?.querySelector(
 			`.wx-bar[data-id='${setID(id)}']`
@@ -484,26 +676,13 @@ watch(_focusTask, value => {
 const isTaskCritical = task => {
 	return _criticalPath.value && task.critical;
 };
-function isLinkMarkerVisible(id) {
-	if (_schedule.value.auto) {
-		const summaryIds = _tree.value.getSummaryId(id, true);
-		const linkFromSummaryIds = _tree.value.getSummaryId(
-			linkFrom.value.id,
-			true
-		);
-		return (
-			linkFrom.value?.id &&
-			!(
-				Array.isArray(summaryIds) ? summaryIds : [summaryIds]
-			).includes(linkFrom.value.id) &&
-			!(
-				Array.isArray(linkFromSummaryIds)
-					? linkFromSummaryIds
-					: [linkFromSummaryIds]
-			).includes(id)
-		);
-	}
-	return linkFrom.value;
+
+function isLinkTarget(id, atStart) {
+	if (!linkFrom.value) return true;
+	if (alreadyLinked(id, atStart)) return false;
+	if (!linkValidator) return true;
+	const type = getLinkType(linkFrom.value.start, atStart);
+	return !linkValidator({ source: linkFrom.value.id, target: id, type });
 }
 
 // Track offsetWidth via ResizeObserver
@@ -557,6 +736,15 @@ onUnmounted(() => {
 			:selectedLink="selectedLink"
 			:readonly="props.readonly"
 		/>
+		<div
+			v-if="taskSchedule"
+			:class="[
+				'wx-bar',
+				'wx-' + (taskSchedule.task?.type || 'task'),
+				'wx-schedule-task',
+			]"
+			:style="scheduleStyle(taskSchedule)"
+		></div>
 		<template v-for="task in tasks" :key="task.id">
 			<div
 				v-if="!task.$skip"
@@ -571,6 +759,9 @@ onUnmounted(() => {
 						'wx-critical': isTaskCritical(task),
 						'wx-reorder-task': task.$reorder,
 						'wx-split': _splitTasks && task.segments,
+						'wx-manual': _schedule?.auto && task.manual,
+						'wx-inactive': _inactiveTasks && task.inactive,
+						'wx-no-working-time': task.$noWorkingTime,
 					},
 				]"
 				:style="taskStyle(task)"
@@ -601,10 +792,7 @@ onUnmounted(() => {
 								'wx-left',
 								{
 									'wx-visible': linkFrom,
-									'wx-target':
-										!linkFrom ||
-										(!alreadyLinked(task.id, true) &&
-											isLinkMarkerVisible(task.id)),
+									'wx-target': isLinkTarget(task.id, true),
 									'wx-selected':
 										linkFrom &&
 										linkFrom.id === task.id &&
@@ -711,15 +899,7 @@ onUnmounted(() => {
 								'wx-right',
 								{
 									'wx-visible': linkFrom,
-									'wx-target':
-										!linkFrom ||
-										(!alreadyLinked(
-											task.id,
-											false
-										) &&
-											isLinkMarkerVisible(
-												task.id
-											)),
+									'wx-target': isLinkTarget(task.id, false),
 									'wx-selected':
 										linkFrom &&
 										linkFrom.id === task.id &&
@@ -750,25 +930,153 @@ onUnmounted(() => {
 					:style="baselineStyle(task)"
 				></div>
 			</template>
+			<div
+				v-if="
+					_deadlines &&
+					task.deadline &&
+					typeof task.$x_deadline === 'number'
+				"
+				:class="['wx-deadline', { 'wx-overdue': task.$overdue }]"
+				:style="deadlineStyle(task)"
+			>
+				<i class="wxi-flag" :data-deadline="task.id"></i>
+			</div>
+			<div
+				v-if="task.constraint && typeof task.$x_constraint === 'number'"
+				:class="[
+					'wx-constraint',
+					'wx-constraint-' + task.constraint.type,
+					{
+						'wx-start': constraintOpensRight(task.constraint.type),
+						'wx-end': !constraintOpensRight(task.constraint.type),
+						'wx-violated': constraintViolated?.has(
+							task.$id || task.id
+						),
+						'wx-compact': isConstraintCompact(task),
+					},
+				]"
+				:style="constraintStyle(task)"
+				:data-constraint-id="setID(task.id)"
+			>
+				<span class="wx-constraint-badge">{{
+					task.constraint.type.toUpperCase()
+				}}</span>
+				<span class="wx-constraint-line"></span>
+				<span
+					v-if="!isMustConstraint(task.constraint.type)"
+					class="wx-constraint-arrow"
+					aria-hidden="true"
+				></span>
+			</div>
 		</template>
 	</div>
 </template>
 
 <style scoped>
-.wx-rollup {
-	position: absolute;
-	z-index: 1;
-	background-color: var(--wx-gantt-task-color);
-	border: 1px solid var(--wx-gantt-marker-color);
-	border-color: var(--wx-gantt-marker-color);
-}
-
 .wx-baseline {
 	position: absolute;
 	background-color: #a883e4;
 	border-radius: var(--wx-gantt-baseline-border-radius);
 	z-index: 1;
 }
+
+.wx-deadline {
+	position: absolute;
+	display: flex;
+	font-size: 20px;
+	translate: -5px 0;
+	z-index: 2;
+	color: var(--wx-gantt-deadline-color, #9fa1ae);
+}
+.wx-deadline.wx-overdue {
+	color: var(--wx-gantt-deadline-overdue-color, #fe6158);
+}
+.wx-deadline > i {
+	height: 20px;
+	cursor: pointer;
+}
+
+.wx-constraint {
+	position: absolute;
+	width: 0;
+	z-index: 2;
+	/* Pin sits on the bar edge; let resize and move reach the task. */
+	pointer-events: none;
+	--wx-constraint-pin-color: var(--wx-gantt-icon-color);
+}
+.wx-constraint-line,
+.wx-constraint-arrow {
+	pointer-events: none;
+}
+.wx-constraint.wx-violated {
+	--wx-constraint-pin-color: var(--wx-gantt-constraint-violation-color);
+}
+.wx-constraint-line {
+	position: absolute;
+	left: 0;
+	top: 1px;
+	bottom: 1px;
+	width: 2px;
+	translate: -50% 0;
+	border-radius: 2px;
+	background: var(--wx-constraint-pin-color);
+}
+.wx-constraint-arrow {
+	position: absolute;
+	top: 50%;
+	width: 6px;
+	height: 12px;
+	margin-top: -6px;
+	background: var(--wx-constraint-pin-color);
+	--wx-constraint-arrow-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 12'%3E%3Cpath fill='%23000' d='M0 0.8Q0 0 1 0.3L5.2 5.1Q6 6 5.2 6.9L1 11.7Q0 12 0 11.2Z'/%3E%3C/svg%3E");
+	-webkit-mask: var(--wx-constraint-arrow-mask) center / 100% 100% no-repeat;
+	mask: var(--wx-constraint-arrow-mask) center / 100% 100% no-repeat;
+}
+/* 1px (half of 2px line) + 2px gap */
+.wx-constraint.wx-start .wx-constraint-arrow {
+	left: calc(50% + 3px);
+}
+.wx-constraint.wx-end .wx-constraint-arrow {
+	right: calc(50% + 3px);
+	transform: scaleX(-1);
+}
+.wx-constraint-badge {
+	position: absolute;
+	top: 1px;
+	height: 14px;
+	box-sizing: border-box;
+	display: inline-flex;
+	align-items: center;
+	font-size: 8px;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	line-height: 1;
+	padding: 2px;
+	border-radius: 2px;
+	background: var(--wx-background-alt);
+	white-space: nowrap;
+	pointer-events: auto;
+}
+.wx-constraint.wx-start .wx-constraint-badge {
+	right: calc(50% + 3px);
+}
+.wx-constraint.wx-end .wx-constraint-badge {
+	left: calc(50% + 3px);
+}
+.wx-constraint.wx-violated .wx-constraint-badge {
+	background: var(--wx-gantt-constraint-violated-badge-bg);
+}
+.wx-constraint.wx-compact .wx-constraint-badge {
+	display: none;
+}
+/* Line is the only visible target once the badge is hidden. */
+.wx-constraint.wx-compact .wx-constraint-line {
+	pointer-events: auto;
+}
+.wx-constraint.wx-compact:hover .wx-constraint-badge {
+	display: inline-flex;
+}
+
 .wx-baseline.wx-milestone {
 	transform: rotate(45deg) scale(0.75);
 	border-radius: var(--wx-gantt-milestone-border-radius);
@@ -803,6 +1111,12 @@ onUnmounted(() => {
 
 .wx-bar.wx-reorder-task {
 	z-index: 3;
+}
+
+.wx-bar.wx-schedule-task {
+	pointer-events: none;
+	z-index: 2;
+	opacity: 0.5;
 }
 .wx-bar :deep(.wx-content) {
 	overflow: hidden;
@@ -866,12 +1180,13 @@ onUnmounted(() => {
 	border-color: var(--wx-gantt-milestone-color);
 }
 
-.wx-milestone .wx-text-out {
+.wx-milestone :deep(.wx-text-out) {
 	padding: 0 2px;
 	left: 100%;
 }
 
-.wx-milestone .wx-content {
+.wx-milestone .wx-content,
+.wx-milestone.wx-schedule-task {
 	height: 100%;
 	background-color: var(--wx-gantt-milestone-color);
 	transform: rotate(45deg) scale(0.75);
@@ -900,7 +1215,7 @@ onUnmounted(() => {
 	background: var(--wx-gantt-progress-border-color);
 	clip-path: polygon(50% 0, 100% 30%, 100% 100%, 0 100%, 0 30%);
 	color: var(--wx-color-font);
-	z-index: 3;
+	z-index: 5;
 	font-size: calc(var(--wx-font-size-sm) - 2px);
 	border-radius: 4px;
 	cursor: ew-resize;
@@ -1006,6 +1321,15 @@ onUnmounted(() => {
 .wx-cut {
 	opacity: 50%;
 }
+.wx-bar.wx-manual:not(.wx-milestone):not(.wx-split):not(:focus),
+.wx-bar.wx-manual.wx-split :deep(.wx-segment) {
+	outline: 1px solid var(--wx-gantt-manual-border-color);
+	outline-offset: 1px;
+}
+.wx-milestone.wx-manual .wx-content {
+	outline: 1px solid var(--wx-gantt-manual-border-color);
+	outline-offset: 1.6px;
+}
 .wx-bar:not(.wx-milestone):focus {
 	outline: 1px solid var(--wx-color-primary);
 	outline-offset: 1px;
@@ -1068,6 +1392,29 @@ onUnmounted(() => {
 .wx-critical.wx-split .wx-link.wx-selected,
 .wx-critical.wx-split .wx-link.wx-selected .wx-inner {
 	border-color: var(--wx-gantt-task-critical-color);
+}
+
+.wx-task.wx-inactive:not(.wx-split),
+.wx-summary.wx-inactive,
+.wx-task :deep(.wx-segment.wx-inactive) {
+	background-color: var(--wx-gantt-inactive-color);
+}
+.wx-milestone.wx-inactive .wx-content,
+.wx-milestone.wx-inactive.wx-schedule-task {
+	background-color: var(--wx-gantt-inactive-color);
+}
+.wx-milestone.wx-inactive {
+	border-color: var(--wx-gantt-inactive-color);
+}
+.wx-task.wx-inactive .wx-progress-percent,
+.wx-summary.wx-inactive .wx-progress-percent,
+.wx-inactive :deep(.wx-segment .wx-progress-percent) {
+	background-color: var(--wx-gantt-inactive-fill-color);
+}
+
+/* on the bar itself, so segments, the milestone shape and the fill go with it */
+.wx-no-working-time {
+	opacity: var(--wx-gantt-no-working-time-opacity, 0.45);
 }
 
 .wx-slack {

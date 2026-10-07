@@ -11,6 +11,7 @@ import {
 	handleAction,
 	getMenuOptions,
 	isHandledAction,
+	isPlaceholder,
 } from "@svar-ui/gantt-store";
 
 import { locale, locateID, locate } from "@svar-ui/lib-dom";
@@ -107,7 +108,8 @@ function itemResolver(id, ev) {
 	if (
 		locate(ev.target, "data-menu-ignore")?.classList.contains(
 			"wx-resource-load"
-		)
+		) ||
+		isPlaceholder(id)
 	)
 		return null;
 
@@ -188,9 +190,13 @@ defineExpose({ show });
 		:at="at"
 		ref="menu"
 	/>
-	<span :oncontextmenu="menu?.show" data-menu-ignore="true">
+	<div
+		style="display: contents"
+		:oncontextmenu="menu?.show"
+		data-menu-ignore="true"
+	>
 		<slot />
-	</span>
+	</div>
 </template>
 
 <style scoped>

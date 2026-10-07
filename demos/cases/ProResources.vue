@@ -13,7 +13,7 @@ const api = ref(null);
 
 const tasks = ref([...data.tasks]);
 
-const enabled = ref(false);
+const enabled = ref(true);
 const multipleResources = ref(false);
 const resourceHierarchy = ref(false);
 const popup = ref(false);

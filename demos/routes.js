@@ -1,6 +1,7 @@
 import BasicInit from "./cases/BasicInit.vue";
 import GanttProvider from "./cases/GanttProvider.vue";
 import GanttBatchProvider from "./cases/GanttBatchProvider.vue";
+import MultiUser from "./cases/MultiUser.vue";
 import GanttBackend from "./cases/GanttBackend.vue";
 import GanttExcelImport from "./cases/GanttExcelImport.vue";
 import GanttScales from "./cases/GanttScales.vue";
@@ -12,18 +13,23 @@ import GanttPreventActions from "./cases/GanttPreventActions.vue";
 import GanttForm from "./cases/GanttForm.vue";
 import GanttSizes from "./cases/GanttSizes.vue";
 import GanttMultiple from "./cases/GanttMultiple.vue";
-import GanttPerformance from "./cases/GanttPerformance.vue";
 import GanttDisplayMode from "./cases/GanttDisplayMode.vue";
+import GanttPerformance from "./cases/GanttPerformance.vue";
+import GanttDragFromOutside from "./cases/GanttDragFromOutside.vue";
 
 import Markers from "./cases/ProMarkers.vue";
 import UnscheduledTasks from "./cases/ProUnscheduledTasks.vue";
+import PlaceholderRow from "./cases/ProPlaceholderRow.vue";
 import Baselines from "./cases/ProBaselines.vue";
 import Rollups from "./cases/ProRollups.vue";
 import CriticalPath from "./cases/ProCriticalPath.vue";
 import AutoSchedule from "./cases/ProAutoSchedule.vue";
+import Constraints from "./cases/ProConstraints.vue";
+import ManualInactive from "./cases/ProManualInactive.vue";
 import Calendar from "./cases/ProCalendar.vue";
 import MultipleCalendars from "./cases/ProMultipleCalendars.vue";
 import ResourceCalendars from "./cases/ProResourceCalendars.vue";
+import ScheduleResourceCalendars from "./cases/ProScheduleResourceCalendars.vue";
 import UndoRedo from "./cases/ProUndo.vue";
 import UndoToolbar from "./cases/ProUndoToolbar.vue";
 import SplitTasks from "./cases/ProSplitTasks.vue";
@@ -37,7 +43,14 @@ import Resources from "./cases/ProResources.vue";
 import Grouping from "./cases/ProGrouping.vue";
 import ResourcesProvider from "./cases/ProResourcesProvider.vue";
 import ResourceLoad from "./cases/ProResourceLoad.vue";
+import ResourceHistogram from "./cases/ProResourceHistogram.vue";
+import ResourceDragAssign from "./cases/ProResourceDragAssign.vue";
+import ResourceLoadDragAssign from "./cases/ProResourceLoadDragAssign.vue";
 import WBS from "./cases/ProWBS.vue";
+import SCurve from "./cases/ProSCurve.vue";
+import Deadlines from "./cases/ProDeadlines.vue";
+import ProgressLine from "./cases/ProProgressLine.vue";
+import SubGrid from "./cases/ProSubGrid.vue";
 
 import GanttTooltips from "./cases/GanttTooltips.vue";
 import GanttToolbar from "./cases/GanttToolbar.vue";
@@ -52,6 +65,7 @@ import GanttZoom from "./cases/GanttZoom.vue";
 import GanttCustomZoom from "./cases/GanttCustomZoom.vue";
 import GanttLengthUnit from "./cases/GanttLengthUnit.vue";
 import GanttTaskTypes from "./cases/GanttTaskTypes.vue";
+import GanttInclusiveEnd from "./cases/GanttInclusiveEnd.vue";
 import ChartCellBorders from "./cases/ChartBorders.vue";
 import ContextMenu from "./cases/ContextMenu.vue";
 import ContextMenuHandler from "./cases/ContextMenuHandler.vue";
@@ -133,6 +147,14 @@ export const links = [
 	["/zoom/:skin", "Zoom", GanttZoom, "GanttZoom"],
 	["/custom-zoom/:skin", "Custom Zoom", GanttCustomZoom, "GanttCustomZoom"],
 	["/markers/:skin", "Markers", Markers, "ProMarkers", { pro: true }],
+	[
+		"/progress-line/:skin",
+		"Progress Line",
+		ProgressLine,
+		"ProProgressLine",
+		{ pro: true },
+	],
+	["/scurve/:skin", "S-curve", SCurve, "ProSCurve", { pro: true }],
 	["/holidays/:skin", "Holidays", GanttHolidays, "GanttHolidays"],
 
 	{ group: "Grid" },
@@ -154,6 +176,13 @@ export const links = [
 		GanttDisplayMode,
 		"GanttDisplayMode",
 	],
+	[
+		"/sub-grid/:skin",
+		"Secondary grid panel",
+		SubGrid,
+		"ProSubGrid",
+		{ pro: true },
+	],
 	["/no-grid/:skin", "No grid", GanttNoGrid, "GanttNoGrid"],
 	[
 		"/header-menu/:skin",
@@ -161,7 +190,6 @@ export const links = [
 		HeaderMenu,
 		"GridHeaderMenu",
 	],
-
 	{ group: "Tasks" },
 	["/task-types/:skin", "Task types", GanttTaskTypes, "GanttTaskTypes"],
 	[
@@ -189,6 +217,12 @@ export const links = [
 	["/templates/:skin", "Custom text", GanttText, "GanttText"],
 	["/tooltips/:skin", "Tooltips", GanttTooltips, "GanttTooltips"],
 	["/wbs/:skin", "WBS codes", WBS, "ProWBS", { pro: true }],
+	[
+		"/inclusive-end/:skin",
+		"Inclusive end date",
+		GanttInclusiveEnd,
+		"GanttInclusiveEnd",
+	],
 
 	{ group: "Data operations" },
 	[
@@ -202,6 +236,19 @@ export const links = [
 		"Edit tasks in grid",
 		GridInlineEditors,
 		"GridInlineEditors",
+	],
+	[
+		"/drag-from-outside/:skin",
+		"Add tasks by drag-n-drop from outside",
+		GanttDragFromOutside,
+		"GanttDragFromOutside",
+	],
+	[
+		"/placeholder-row/:skin",
+		"Add tasks via placeholder row",
+		PlaceholderRow,
+		"ProPlaceholderRow",
+		{ pro: true },
 	],
 	["/readonly/:skin", "Readonly", GanttReadOnly, "GanttReadOnly"],
 	[
@@ -249,6 +296,20 @@ export const links = [
 		{ pro: true },
 	],
 	[
+		"/constraints/:skin",
+		"Constraints",
+		Constraints,
+		"ProConstraints",
+		{ pro: true },
+	],
+	[
+		"/manual-inactive/:skin",
+		"Manual and inactive tasks",
+		ManualInactive,
+		"ProManualInactive",
+		{ pro: true },
+	],
+	[
 		"/critical-path/:skin",
 		"Critical path",
 		CriticalPath,
@@ -278,20 +339,22 @@ export const links = [
 		"ProMultipleCalendars",
 		{ pro: true },
 	],
+	["/deadlines/:skin", "Deadlines", Deadlines, "ProDeadlines", { pro: true }],
 
 	{ group: "Resources" },
-	[
-		"/resources/:skin",
-		"Resources",
-		Resources,
-		"ProResources",
-		{ pro: true },
-	],
+	["/resources/:skin", "Resources", Resources, "ProResources", { pro: true }],
 	[
 		"/resource-load/:skin",
 		"Resource load",
 		ResourceLoad,
 		"ProResourceLoad",
+		{ pro: true },
+	],
+	[
+		"/resource-histogram/:skin",
+		"Resource histogram",
+		ResourceHistogram,
+		"ProResourceHistogram",
 		{ pro: true },
 	],
 
@@ -303,10 +366,31 @@ export const links = [
 		{ pro: true },
 	],
 	[
+		"/schedule-resource-calendars/:skin",
+		"Schedule from resource calendars",
+		ScheduleResourceCalendars,
+		"ProScheduleResourceCalendars",
+		{ pro: true },
+	],
+	[
 		"/resources-backend/:skin",
 		"Resources backend",
 		ResourcesProvider,
 		"ProResourcesProvider",
+		{ pro: true },
+	],
+	[
+		"/resource-drag-assign/:skin",
+		"Drag resources onto tasks",
+		ResourceDragAssign,
+		"ProResourceDragAssign",
+		{ pro: true },
+	],
+	[
+		"/resource-load-drag-assign/:skin",
+		"Drag from resource load",
+		ResourceLoadDragAssign,
+		"ProResourceLoadDragAssign",
 		{ pro: true },
 	],
 
@@ -324,6 +408,7 @@ export const links = [
 		GanttBatchProvider,
 		"GanttBatchProvider",
 	],
+	["/multi-user/:skin", "Multi-user editing", MultiUser, "MultiUser"],
 	[
 		"/excel-import/:skin",
 		"Import from Excel / CSV",

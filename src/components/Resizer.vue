@@ -1,61 +1,41 @@
 <script setup>
 defineOptions({ name: "GanttResizer" });
 
-import { computed } from "vue";
-import { subscribe } from "@svar-ui/lib-vue";
+import { computed, onUnmounted } from "vue";
 
 const props = defineProps({
-	api: {},
-	position: { default: "after" },
-	size: { default: 4 },
-	dir: { default: "x" },
-	onmove: { type: Function },
-	containerWidth: { default: 0 },
-	rightThreshold: { default: 50 },
+	side: { default: "left" },
+	layout: { default: "both" },
+	draggable: { type: Boolean, default: false },
+	hideButtonsUntilHover: { type: Boolean, default: false },
+	startButton: { default: null },
+	endButton: { default: null },
+	panelWidth: { default: 0 },
+	resizeInvert: { type: Boolean, default: false },
+	onResize: { type: Function },
+	onResizeStart: { type: Function },
+	onResizeEnd: { type: Function },
+	onExpandStart: { type: Function },
+	onExpandEnd: { type: Function },
 });
 
-const { gridWidth, displayMode, _gridCollapseThreshold, _compactMode } =
-	props.api.getReactiveState();
+const cursor = computed(() => (props.draggable ? "ew-resize" : "auto"));
 
-const gridWidthVal = subscribe(gridWidth);
-const displayModeVal = subscribe(displayMode);
-const gridCollapseThreshold = subscribe(_gridCollapseThreshold);
-const compactMode = subscribe(_compactMode);
+let start = 0;
+let pos;
+let width = null; // last dragged width, null when not dragging
 
-function getBox(value) {
-	let offset = 0;
-	if (props.position === "center") offset = props.size / 2;
-	else if (props.position === "before") offset = props.size;
-
-	const box = {
-		size: [props.size + "px", "auto"],
-		p: [value - offset + "px", "0px"],
-		p2: ["auto", "0px"],
-	};
-
-	if (props.dir !== "x") for (let name in box) box[name] = box[name].reverse();
-	return box;
-}
-
-let start = 0,
-	pos;
-
-function getEventPos(ev) {
-	return props.dir === "x" ? ev.clientX : ev.clientY;
+function widthAt(ev) {
+	const delta = ev.clientX - start;
+	return props.resizeInvert ? pos - delta : pos + delta;
 }
 
 function down(ev) {
-	// Prevent dragging when in normal mode and only one view is visible
-	if (
-		compactMode.value ||
-		displayModeVal.value === "grid" ||
-		displayModeVal.value === "chart"
-	) {
-		return;
-	}
+	if (!props.draggable) return;
 
-	start = getEventPos(ev);
-	pos = gridWidthVal.value;
+	start = ev.clientX;
+	pos = width = props.panelWidth;
+	props.onResizeStart?.();
 
 	document.body.style.cursor = cursor.value;
 	document.body.style.userSelect = "none";
@@ -64,96 +44,110 @@ function down(ev) {
 	window.addEventListener("mouseup", up);
 }
 
-let timeout;
 function move(ev) {
-	const newPos = pos + getEventPos(ev) - start;
-
-	props.api.exec("resize-grid", {
-		width: newPos,
-	});
-	let nextDisplay;
-
-	if (newPos <= gridCollapseThreshold.value) {
-		nextDisplay = "chart";
-	} else if (props.containerWidth - newPos <= props.rightThreshold) {
-		nextDisplay = "grid";
-	} else {
-		nextDisplay = "all";
-	}
-
-	if (displayModeVal.value !== nextDisplay) {
-		props.api.exec("set-display-mode", {
-			mode: nextDisplay,
-		});
-	}
-
-	if (timeout) clearTimeout(timeout);
-	timeout = setTimeout(() => props.onmove && props.onmove(newPos), 100);
+	width = widthAt(ev);
+	props.onResize?.(width);
 }
 
-function up() {
+function stop() {
 	document.body.style.cursor = "";
 	document.body.style.userSelect = "";
 	window.removeEventListener("mousemove", move);
 	window.removeEventListener("mouseup", up);
 }
 
-function handleExpand(direction) {
-	let mode;
-	if (compactMode.value) {
-		mode = displayModeVal.value === "chart" ? "grid" : "chart";
-	} else {
-		if (displayModeVal.value === "grid" || displayModeVal.value === "chart") {
-			mode = "all";
-		} else mode = direction === "left" ? "chart" : "grid";
-	}
-
-	props.api.exec("set-display-mode", { mode });
+function end(endWidth) {
+	width = null;
+	stop();
+	props.onResizeEnd?.(endWidth);
 }
 
-function handleExpandLeft() {
-	handleExpand("left");
+function up(ev) {
+	end(widthAt(ev));
 }
 
-function handleExpandRight() {
-	handleExpand("right");
+// unmounted mid-drag: still commit, so the store drops its drag snapshot
+onUnmounted(() => {
+	if (width != null) end(width);
+	else stop();
+});
+
+function expandStart(ev) {
+	props.onExpandStart?.(ev);
 }
 
-const b = computed(() => getBox(gridWidthVal.value));
-const cursor = computed(() =>
-	displayModeVal.value !== "all"
-		? "auto"
-		: props.dir === "x"
-			? "ew-resize"
-			: "ns-resize"
-);
+function expandEnd(ev) {
+	props.onExpandEnd?.(ev);
+}
 </script>
 
 <template>
 	<div
 		:class="[
 			'wx-resizer',
-			`wx-resizer-${dir}`,
-			`wx-resizer-display-${displayModeVal}`,
+			`wx-resizer-${side}`,
+			`wx-resizer-layout-${layout}`,
+			{ 'wx-resizer-grip-hover': hideButtonsUntilHover },
 		]"
 		@mousedown="down"
-		:style="`width:${b.size[0]}; height: ${b.size[1]}; cursor:${cursor};`"
+		:style="`cursor:${cursor};`"
 	>
 		<div class="wx-button-expand-box">
-			<div class="wx-button-expand-content wx-button-expand-left">
-				<i class="wxi-menu-left" @click="handleExpandLeft"></i>
+			<div
+				v-if="startButton?.visible"
+				:class="[
+					'wx-button-expand-content',
+					`wx-button-expand-${startButton.side}`,
+				]"
+			>
+				<i
+					:class="`wxi-menu-${startButton.icon}`"
+					@click="expandStart"
+				></i>
 			</div>
-			<div class="wx-button-expand-content wx-button-expand-right">
-				<i class="wxi-menu-right" @click="handleExpandRight"></i>
+			<div
+				v-if="endButton?.visible"
+				:class="[
+					'wx-button-expand-content',
+					`wx-button-expand-${endButton.side}`,
+				]"
+			>
+				<i :class="`wxi-menu-${endButton.icon}`" @click="expandEnd"></i>
 			</div>
 		</div>
-		<div class="wx-resizer-line"></div>
 	</div>
 </template>
 
 <style scoped>
-.wx-resizer.wx-resizer-display-all:hover::before,
-.wx-resizer.wx-resizer-display-all:hover::after,
+.wx-resizer {
+	position: relative;
+	display: flex;
+	flex: 0 0 auto;
+	width: 4px;
+	align-items: center;
+	justify-content: center;
+	background-color: var(--wx-gantt-border-color);
+}
+
+.wx-resizer-left {
+	z-index: 12;
+}
+
+.wx-resizer-right {
+	z-index: 11;
+}
+
+.wx-resizer-right.wx-resizer-layout-collapsed {
+	overflow: visible;
+}
+
+.wx-resizer-grip-hover:not(:hover) .wx-button-expand-content {
+	opacity: 0;
+}
+
+/* drag grip lines */
+.wx-resizer-grip-hover:hover::before,
+.wx-resizer-grip-hover:hover::after,
 .wx-button-expand-content::before,
 .wx-button-expand-content::after {
 	content: "";
@@ -161,59 +155,51 @@ const cursor = computed(() =>
 	background-color: var(--wx-gantt-border-color);
 }
 
-.wx-resizer {
-	position: relative;
-	z-index: 10;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	background-color: var(--wx-gantt-border-color);
-}
-.wx-resizer:hover .wx-button-expand-content {
-	opacity: 1;
-}
-
-.wx-resizer.wx-resizer-display-all:hover::before,
-.wx-resizer.wx-resizer-display-all:hover::after {
+.wx-resizer-grip-hover:hover::before,
+.wx-resizer-grip-hover:hover::after {
 	top: 0;
 	width: 2px;
 	height: 100%;
 }
 
-.wx-resizer.wx-resizer-display-all:hover::before {
+.wx-resizer-grip-hover.wx-resizer-left:hover::before {
 	left: -3px;
 }
 
-.wx-resizer.wx-resizer-display-all:hover::after {
+.wx-resizer-grip-hover.wx-resizer-left:hover::after {
 	right: -2px;
 }
 
-.wx-resizer-display-chart .wx-button-expand-left {
-	display: none;
+.wx-resizer-grip-hover.wx-resizer-right:hover::before {
+	left: -2px;
 }
 
-.wx-resizer-display-grid .wx-button-expand-right {
-	display: none;
+.wx-resizer-grip-hover.wx-resizer-right:hover::after {
+	right: -3px;
 }
 
-.wx-resizer-display-all {
-	.wx-button-expand-content {
-		opacity: 0;
-	}
-}
-
-.wx-resizer-display-all .wx-button-expand-box,
-.wx-resizer-display-chart .wx-button-expand-box {
+/* expand box offset toward the adjacent panel */
+.wx-resizer-layout-both .wx-button-expand-box,
+.wx-resizer-layout-end .wx-button-expand-box {
 	left: 12px;
 }
 
-.wx-resizer-display-grid .wx-button-expand-left {
+.wx-resizer-right.wx-resizer-layout-collapsed .wx-button-expand-box {
+	left: -12px;
+}
+
+/* expand button position within the box */
+.wx-resizer-layout-both .wx-button-expand-left {
+	right: 5px;
+}
+
+.wx-resizer-layout-start .wx-button-expand-left {
 	right: -6px;
 }
 
-.wx-resizer-display-chart .wx-button-expand-left,
-.wx-resizer-display-all .wx-button-expand-left {
-	right: 5px;
+.wx-resizer-right.wx-resizer-layout-collapsed .wx-button-expand-left {
+	left: 5px;
+	right: auto;
 }
 
 .wx-button-expand-box {
@@ -223,6 +209,7 @@ const cursor = computed(() =>
 
 .wx-button-expand-content {
 	position: absolute;
+	top: 4px;
 	transform: translate(-50%, -50%);
 	width: 20px;
 
@@ -245,7 +232,6 @@ const cursor = computed(() =>
 }
 
 .wx-button-expand-right {
-	top: 4px;
 	left: 1px;
 
 	&::before {
@@ -268,12 +254,6 @@ const cursor = computed(() =>
 }
 
 .wx-button-expand-left {
-	top: 4px;
-	i {
-		border-top-left-radius: 4px;
-		border-bottom-left-radius: 4px;
-	}
-
 	&::before {
 		top: -3.6px;
 		left: 3px;
@@ -287,6 +267,11 @@ const cursor = computed(() =>
 		width: 17px;
 		height: 4px;
 		clip-path: polygon(0 0, 100% 100%, 100% 0);
+	}
+
+	i {
+		border-top-left-radius: 4px;
+		border-bottom-left-radius: 4px;
 	}
 }
 </style>

@@ -7,6 +7,7 @@ import {
 	handleAction,
 	getToolbarButtons,
 	isHandledAction,
+	isPlaceholder,
 } from "@svar-ui/gantt-store";
 
 import { locale } from "@svar-ui/lib-dom";
@@ -31,20 +32,35 @@ const undo = subscribeLater(() => props.api?.getReactiveState()?.undo);
 const history = subscribeLater(() => props.api?.getReactiveState()?.history);
 const splitTasks = subscribeLater(() => props.api?.getReactiveState()?.splitTasks);
 const groupBy = subscribeLater(() => props.api?.getReactiveState()?.groupBy);
+const conflicts = subscribeLater(() => props.api?.getReactiveState()?.conflicts);
+const showConflicts = subscribeLater(
+	() => props.api?.getReactiveState()?.showConflicts
+);
+const schedule = subscribeLater(() => props.api?.getReactiveState()?.schedule);
 
 const historyActions = ["undo", "redo"];
 
 const finalItems = computed(() => {
-	const fullButtons = getToolbarButtons({ undo: true, splitTasks: true });
+	const fullButtons = getToolbarButtons({
+		undo: true,
+		splitTasks: true,
+		conflicts: true,
+	});
 	const buttons = props.items.length
 		? props.items
 		: getToolbarButtons({
 				undo: undo().value,
 				splitTasks: splitTasks().value,
 				group: !!groupBy().value?.field,
+				conflicts: schedule().value?.auto,
 			});
 	return buttons.map(b => {
 		b = { ...b, disabled: false };
+		if (b.id === "show-conflicts") {
+			if (conflicts().value?.length)
+				b.css = b.css ? `${b.css} wx-conflicts` : "wx-conflicts";
+			if (showConflicts().value) b.type = "pressed";
+		}
 		b.handler = isHandledAction(fullButtons, b.id)
 			? item => handleAction(props.api, item.id, null, _)
 			: b.handler;
@@ -61,8 +77,12 @@ const buttons = computed(() => {
 		const action = item.id;
 
 		if (action === "add-task" || !historyActions.includes(action)) {
-			if (!$_selected?.length || !props.api) {
-				if (action !== "add-task") return;
+			if (
+				!$_selected?.length ||
+				($_selected?.length === 1 && isPlaceholder($_selected[0].id)) ||
+				!props.api
+			) {
+				if (action !== "add-task" && action !== "show-conflicts") return;
 				finalButtons.push(item);
 			} else {
 				finalButtons.push({
@@ -103,3 +123,29 @@ const buttons = computed(() => {
 <template>
 	<Toolbar :items="buttons" />
 </template>
+
+<style scoped>
+/* Orange corner dot when the graph has conflicts. */
+:global(.wx-button.wx-conflicts),
+:global(i.wx-conflicts) {
+	position: relative;
+}
+:global(.wx-button.wx-conflicts::after),
+:global(i.wx-conflicts::after) {
+	content: "";
+	position: absolute;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--wx-gantt-constraint-violation-color);
+	pointer-events: none;
+}
+:global(.wx-button.wx-conflicts::after) {
+	top: 2px;
+	right: 2px;
+}
+:global(i.wx-conflicts::after) {
+	top: 0;
+	right: -2px;
+}
+</style>

@@ -25,7 +25,9 @@ const columns = computed(() => (selected.value === "some" ? hidable : null));
 <template>
 	<div class="rows">
 		<div class="bar">
-			<div>Right-click the grid header and select visible columns</div>
+			<div class="hint">
+				Right-click the grid header and select visible columns
+			</div>
 			<div class="bar">
 				<div class="label">Columns that can be hidden:</div>
 				<RadioButtonGroup
@@ -66,7 +68,9 @@ const columns = computed(() => (selected.value === "some" ? hidable : null));
 	align-items: center;
 	justify-content: space-between;
 }
-
+.hint {
+	color: var(--wx-color-font-alt);
+}
 .gtcell {
 	position: relative;
 	height: 100%;

@@ -1,6 +1,6 @@
 <script setup>
 defineOptions({ name: "DemoRouter" });
-import { onMounted, watch } from "vue";
+import { computed, onMounted, watch } from "vue";
 import { useRouter } from "vue-router";
 import { getLinks } from "./helpers";
 
@@ -14,10 +14,12 @@ const props = defineProps({
 
 const emit = defineEmits(["onnewpage"]);
 
-const baseLink =
-	"https://github.com/svar-widgets/vue-" +
-	props.productTag +
-	"/blob/main/demos/cases/";
+const baseLink = computed(
+	() =>
+		"https://github.com/svar-widgets/vue-" +
+		props.productTag +
+		"/blob/main/demos/cases/"
+);
 
 const links = getLinks();
 
@@ -46,7 +48,7 @@ function onRouteChange(path) {
 	const matched = links.find((a) => Array.isArray(a) && a[0] === tPage);
 	const title = matched?.[1] ?? "";
 	const filename = matched?.[3] ?? "";
-	const link = `${baseLink}${filename.replace(/\s+/g, "")}.vue`;
+	const link = `${baseLink.value}${filename.replace(/\s+/g, "")}.vue`;
 
 	emit("onnewpage", {
 		page: page,

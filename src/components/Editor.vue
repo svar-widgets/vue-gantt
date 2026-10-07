@@ -1,15 +1,27 @@
 <script setup>
 defineOptions({ name: "GanttEditor" });
 
-import { ref, computed, watch, watchEffect, inject, provide } from "vue";
+import {
+	ref,
+	shallowRef,
+	computed,
+	watch,
+	watchEffect,
+	inject,
+	provide,
+} from "vue";
 import { Editor, registerEditorItem } from "@svar-ui/vue-editor";
 import { registerToolbarItem } from "@svar-ui/vue-toolbar";
 import { Locale, Tabs } from "@svar-ui/vue-core";
 import {
+	defaultConstraintTypes,
 	getEditorItems,
 	prepareEditTask,
 	getEditorButtons,
 	filterEditorButtons,
+	getDateEditorButtons,
+	toInclusiveTask,
+	fromInclusiveTask,
 } from "@svar-ui/gantt-store";
 import { dateToString, locale } from "@svar-ui/lib-dom";
 import { en } from "@svar-ui/gantt-locales";
@@ -27,6 +39,7 @@ import Links from "./editor/Links.vue";
 import DateTimePicker from "./editor/DateTimePicker.vue";
 import Resources from "./editor/Resources.vue";
 import Segments from "./editor/Segments.vue";
+import Constraint from "./editor/Constraint.vue";
 
 registerEditorItem("select", RichSelect);
 registerEditorItem("date", DateTimePicker);
@@ -37,6 +50,7 @@ registerEditorItem("links", Links);
 registerEditorItem("checkbox", Checkbox);
 registerEditorItem("resources", Resources);
 registerEditorItem("segments", Segments);
+registerEditorItem("constraint", Constraint);
 registerToolbarItem("tabs", Tabs);
 
 const props = defineProps({
@@ -66,13 +80,18 @@ const dateFormat = dateToString(f, i18nData.calendar);
 const activeTask = subscribeLater(() => props.api?.getReactiveState()?._activeTask);
 const taskId = subscribeLater(() => props.api?.getReactiveState()?.activeTask);
 const unscheduledTasks = subscribeLater(() => props.api?.getReactiveState()?.unscheduledTasks);
+const inactiveTasks = subscribeLater(() => props.api?.getReactiveState()?.inactiveTasks);
 const rollups = subscribeLater(() => props.api?.getReactiveState()?.rollups);
 const summary = subscribeLater(() => props.api?.getReactiveState()?.summary);
 const links = subscribeLater(() => props.api?.getReactiveState()?.links);
 const splitTasks = subscribeLater(() => props.api?.getReactiveState()?.splitTasks);
 const taskTypes = subscribeLater(() => props.api?.getReactiveState()?.taskTypes);
 const resources = subscribeLater(() => props.api?.getReactiveState()?.resources ?? null);
+const schedule = subscribeLater(() => props.api?.getReactiveState()?.schedule);
 const compactMode = subscribeLater(() => props.api?.getReactiveState()?._compactMode);
+const deadlines = subscribeLater(() => props.api?.getReactiveState()?.deadlines);
+const criticalPath = subscribeLater(() => props.api?.getReactiveState()?.criticalPath);
+const inclusiveEnd = subscribeLater(() => props.api?.getReactiveState()?.inclusiveEnd);
 const undo = subscribeLater(() => props.api?.getReactiveState()?.undo);
 
 const defBatch = "general";
@@ -82,17 +101,23 @@ const styleCss = computed(() => (compactMode().value ? "wx-full-screen" : ""));
 const baseItems = computed(() =>
 	getEditorItems({
 		unscheduledTasks: unscheduledTasks().value,
+		inactiveTasks: inactiveTasks().value,
 		rollups: rollups().value,
 		summary: summary().value,
 		taskTypes: taskTypes().value,
 		resources: resources().value,
 		splitTasks: splitTasks().value,
+		deadlines: deadlines().value,
+		schedule: schedule().value,
+		criticalPath: criticalPath().value,
 	})
 );
 
-const linksActions = ref(new Map());
-const assignmentsActions = ref(new Map());
-const segmentsActions = ref(new Map());
+// Svelte $state does not proxy Map instances, mirror that with shallowRef
+const linksActions = shallowRef(new Map());
+let taskChanges = null;
+const assignmentsActions = shallowRef(new Map());
+const segmentsActions = shallowRef(new Map());
 const inProgress = ref(null);
 
 const editorValues = ref(undefined);
@@ -100,8 +125,6 @@ const editorErrors = ref(null);
 
 const externalValues = {
 	taskAssignments: null,
-	predecessors: null,
-	successors: null,
 };
 const notSavedValues = ref({ ...externalValues });
 
@@ -113,13 +136,23 @@ const task = computed(() => {
 	if (props.readonly) {
 		// preserve parent to differentiate between segment and task
 		let values = { parent: data.parent };
+		const shown = inclusiveEnd().value
+			? toInclusiveTask(data, props.api.getTaskCalendar(data))
+			: data;
 		baseItems.value.forEach(({ key, comp }) => {
 			if (comp !== "links" && comp !== "resources") {
-				const value = data[key];
+				const value = shown[key];
 				if (comp === "date" && value instanceof Date) {
 					values[key] = dateFormat(value);
 				} else if (comp === "slider" && key === "progress") {
 					values[key] = `${value}%`;
+				} else if (comp === "constraint") {
+					const kind = defaultConstraintTypes.find(
+						t => t.id === value?.type
+					);
+					values[key] = kind
+						? `${_(kind.label)}: ${dateFormat(value.date)}`
+						: "";
 				} else {
 					values[key] = value;
 				}
@@ -127,15 +160,24 @@ const task = computed(() => {
 		});
 		return values;
 	}
-	return data || null;
+	return inclusiveEnd().value
+		? toInclusiveTask(data, props.api.getTaskCalendar(data))
+		: data;
 });
 
-watch(task, val => {
-	editorValues.value = val;
+// the form shows end-like dates under inclusiveEnd,
+// saves and app callbacks get the stored values behind them
+const storedValues = shallowRef(null);
+
+watchEffect(() => {
+	editorValues.value = task.value;
+	const $activeTask = activeTask().value;
+	storedValues.value = $activeTask ? { ...$activeTask } : null;
 });
 
 watch(taskId, () => {
 	linksActions.value = new Map();
+	taskChanges = null;
 	assignmentsActions.value = new Map();
 	segmentsActions.value = new Map();
 	editorErrors.value = null;
@@ -150,8 +192,11 @@ function normalizeItems(items, area = "form") {
 	if (!props.api || !items || !Array.isArray(items)) return items;
 	return items
 		.filter(b => {
-			if (!editorValues.value) return true;
-			return !b.isHidden || !b.isHidden(editorValues.value, props.api.getState());
+			if (!storedValues.value) return true;
+			return (
+				!b.isHidden ||
+				!b.isHidden(storedValues.value, props.api.getState())
+			);
 		})
 		.map(b => {
 			const item = { ...b };
@@ -172,13 +217,13 @@ function normalizeItems(items, area = "form") {
 				if (item.key === "resources") {
 					item.taskAssignments = notSavedValues.value.taskAssignments;
 				} else if (item.key === "links") {
-					item.successors = notSavedValues.value.successors;
-					item.predecessors = notSavedValues.value.predecessors;
+					if (!props.autoSave) item.edits = linksActions.value;
 				} else if (item.key === "segments") {
 					item.segments = notSavedValues.value.segments;
 				}
 				item.onextchange = handleExternalChange;
 			}
+			if (item.key === "constraint") item.task = editorValues.value;
 			if (item.id === "tabs") {
 				item.api = props.api;
 				item.css = "wx-gantt-tabs";
@@ -197,13 +242,21 @@ function normalizeItems(items, area = "form") {
 			if (item.config?.placeholder)
 				item.config.placeholder = _(item.config.placeholder);
 
+			if (item.comp === "date" && props.api) {
+				item.config = { ...item.config };
+				item.config.buttons = getDateEditorButtons(
+					item.key,
+					unscheduledTasks().value
+				).map(b => _(b));
+			}
+
 			if (
-				editorValues.value &&
+				storedValues.value &&
 				item.isDisabled &&
 				item.isDisabled(
-					editorValues.value,
+					storedValues.value,
 					props.api.getState(),
-					props.api.getTaskCalendar(editorValues.value)
+					props.api.getTaskCalendar(storedValues.value)
 				)
 			) {
 				item.disabled = true;
@@ -219,6 +272,8 @@ const editorItems = computed(() => {
 
 const editorBatches = computed(() => new Set(editorItems.value.map(i => i.batch)));
 
+// Reset activeBatch
+// (ex. Segments removed when all segments merged/removed)
 watch(editorBatches, batches => {
 	if (!batches.has(activeBatch.value)) activeBatch.value = defBatch;
 });
@@ -232,6 +287,10 @@ function normalizeBar(bar, batches, type) {
 			resources: resources().value,
 			autoSave: props.autoSave,
 			splitTasks: splitTasks().value,
+			deadlines: deadlines().value,
+			criticalPath: criticalPath().value,
+			inactiveTasks: inactiveTasks().value,
+			schedule: schedule().value,
 		});
 	}
 	bar.items = filterEditorButtons(bar.items, item => {
@@ -261,31 +320,45 @@ const normalizedBottomBar = computed(() => {
 	return normalizeBar(props.bottomBar, editorBatches.value, "bottom");
 });
 
-function handleExternalChange({ view, event, values }) {
-	const { id, action, data } = event;
+function handleExternalChange({ view, event, values = {} }) {
+	let { id, action, data } = event;
 	let actions;
 	if (view === "links") actions = linksActions.value;
 	else if (view === "resources") actions = assignmentsActions.value;
 	else if (view === "segments") actions = segmentsActions.value;
+	// edits to one link add up: a type change survives a later lag change
+	const prev = actions.get(id);
+	if (action === "update-link" && prev?.action === action)
+		data = { ...data, link: { ...prev.data.link, ...data.link } };
 	actions.set(id, { action, data });
 	Object.keys(values).forEach(key => {
 		notSavedValues.value[key] = values[key];
 	});
 }
 
-function saveSections() {
-	for (let [linkId, value] of linksActions.value) {
-		if (links().value.byId(linkId)) {
-			const { action, data } = value;
-			props.api.exec(action, data);
-		}
-	}
+function saveAll() {
+	// removals, then link updates, then the task change: a link update is
+	// checked against the saved task
+	const edits = [...linksActions.value.values()].filter(e =>
+		links().value.byId(e.data.id)
+	);
+	const steps = [
+		...edits.filter(e => e.action === "delete-link"),
+		...edits.filter(e => e.action !== "delete-link"),
+	];
+
+	const history = props.api.getHistory();
+	history?.startBatch();
+	steps.forEach(({ action, data }) => props.api.exec(action, data));
+	if (taskChanges) save({ ...taskChanges });
 	[assignmentsActions.value, segmentsActions.value].forEach(actions => {
 		for (let [, value] of actions) {
 			const { action, data } = value;
 			props.api.exec(action, data);
 		}
 	});
+	history?.endBatch();
+	taskChanges = null;
 }
 
 function deleteTask() {
@@ -301,7 +374,8 @@ function handleAction(ev) {
 	if (item.id === "delete") {
 		deleteTask();
 	} else if (item.id === "save") {
-		saveSections();
+		if (editorErrors.value) return;
+		saveAll();
 	}
 	if (item.comp) hide();
 }
@@ -311,28 +385,34 @@ function handleChange(ev) {
 
 	if (input) inProgress.value = true;
 
-	ev.update = normalizeTask({ ...update }, key, input);
+	const values = inclusiveEnd().value
+		? fromInclusiveTask(update, key, storedValues.value)
+		: { ...update };
+	storedValues.value = normalizeTask(values, key, input);
+	ev.update = inclusiveEnd().value
+		? toInclusiveTask(
+				storedValues.value,
+				props.api.getTaskCalendar(storedValues.value)
+			)
+		: { ...storedValues.value };
 
 	if (!props.autoSave) editorValues.value = ev.update;
 	else if (!editorErrors.value && !input) {
 		const item = editorItems.value.find(i => i.key === key);
 		const v = update[key];
 		const isValid = !item.validation || item.validation(v);
-		if (isValid && (!item.required || v)) save(ev.update);
+		if (isValid && (!item.required || v)) save({ ...storedValues.value });
 	}
 }
 
 function normalizeTask(task, key, input) {
-	if (unscheduledTasks().value && task.type === "summary")
-		task.unscheduled = false;
-
 	prepareEditTask(task, props.api.getState(), props.api.getTaskCalendar(task), key);
 	if (!input) inProgress.value = false;
 	return task;
 }
 
-function handleSave(ev) {
-	if (!props.autoSave) save(ev.values, ev.changes);
+function handleSave() {
+	if (!props.autoSave) taskChanges = { ...storedValues.value };
 }
 
 function handleValidation(check) {
@@ -340,7 +420,7 @@ function handleValidation(check) {
 	editorErrors.value = check.errors;
 }
 
-function save(values, changes) {
+function save(values) {
 	delete values.links;
 	delete values.data;
 
@@ -357,9 +437,6 @@ function save(values, changes) {
 	if (props.autoSave && inProgress.value) data.inProgress = inProgress.value;
 
 	props.api.exec("update-task", data);
-
-	// when changes is not empty, Editor calls onsave and onaction({id: "save})
-	if (!props.autoSave && !changes?.length) saveSections();
 }
 
 const defaultHotkeys = computed(() =>
@@ -405,47 +482,47 @@ function onTabChange(ev) {
 	</Locale>
 </template>
 
-<style scoped>
-:global(.wx-sidearea .wx-gantt-editor) {
+<style>
+.wx-sidearea .wx-gantt-editor {
 	width: 450px;
 	&.wx-full-screen {
 		width: 100%;
 	}
 }
 
-:global(.wx-gantt-editor .wx-editor-toolbar) {
+.wx-gantt-editor .wx-editor-toolbar {
 	margin-bottom: 4px;
-	& :global(.wx-toolbar) {
+	& .wx-toolbar {
 		padding-left: 0;
 		padding-right: 0;
 		gap: 16px;
 	}
-	& :global(.wx-tb-body) {
+	& .wx-tb-body {
 		gap: 8px;
 	}
-	& :global(.wx-tb-element) {
+	& .wx-tb-element {
 		padding-left: 0;
 		padding-right: 0;
 	}
 	/* temp: vue-toolbar 2.6.1 stretches every .wx-tb-element under a
 	   column toolbar, which also hits the ones inside row groups */
-	& :global(.wx-tb-group:not(.wx-column) > .wx-tb-body > .wx-tb-element) {
+	& .wx-tb-group:not(.wx-column) > .wx-tb-body > .wx-tb-element {
 		width: auto;
 	}
-	& :global(.wx-gantt-tabs) {
+	& .wx-gantt-tabs {
 		align-self: start;
 	}
-	& :global(.wx-gantt-tabs .wx-tabs) {
+	& .wx-gantt-tabs .wx-tabs {
 		gap: 16px;
 	}
 
-	& :global(.wx-gantt-tabs button) {
+	& .wx-gantt-tabs button {
 		padding-left: 0;
 		padding-right: 0;
 		min-width: 40px;
 	}
-	& :global(.wx-gantt-tabs .wx-active:after),
-	& :global(.wx-gantt-tabs button:hover:after) {
+	& .wx-gantt-tabs .wx-active:after,
+	& .wx-gantt-tabs button:hover:after {
 		width: 100%;
 		left: 0;
 	}

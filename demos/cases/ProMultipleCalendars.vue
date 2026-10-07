@@ -41,6 +41,7 @@ const groupBy = computed(() => (enabled.value ? { field: "duration" } : null));
 				:links="links"
 				:scales="scales"
 				:cellWidth="60"
+				unscheduledTasks
 			/>
 			<Editor :api="api" />
 		</div>

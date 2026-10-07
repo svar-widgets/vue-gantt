@@ -33,6 +33,7 @@ const data = getData();
 					:schedule="{ auto: true }"
 					:projectStart="projectStart"
 					:projectEnd="new Date(2026, 5, 2)"
+					undo
 				/>
 			</ContextMenu>
 		</div>

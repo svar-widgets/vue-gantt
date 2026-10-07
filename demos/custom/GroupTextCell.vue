@@ -1,4 +1,6 @@
 <script setup>
+defineOptions({ inheritAttrs: false });
+
 import { inject, computed } from "vue";
 import { subscribe } from "@svar-ui/lib-vue";
 

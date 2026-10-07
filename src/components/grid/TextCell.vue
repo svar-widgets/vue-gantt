@@ -1,10 +1,13 @@
 <script setup>
+import { inject } from "vue";
 import GroupCellText from "./GroupCellText.vue";
 
 const props = defineProps({
 	row: {},
 	column: {},
 });
+
+const _ = inject("wx-i18n").getGroup("gantt");
 
 function getStyle(row, col) {
 	return `justify-content:${col.align};padding-left: ${
@@ -33,6 +36,9 @@ function getStyle(row, col) {
 				:column="column"
 			/>
 			<GroupCellText v-else-if="row.$group" :row="row" />
+			<span v-else-if="row.$placeholder && !row.text" class="wx-hint">{{
+				_("New task")
+			}}</span>
 			<template v-else>
 				{{ row.text }}
 			</template>
@@ -71,5 +77,9 @@ function getStyle(row, col) {
 	text-overflow: ellipsis;
 	overflow: hidden;
 	white-space: nowrap;
+}
+
+.wx-hint {
+	color: var(--wx-color-font-disabled);
 }
 </style>

@@ -1,34 +1,20 @@
 <script setup>
+import { inject } from "vue";
+import { getSegmentProgress } from "@svar-ui/gantt-store";
+import { subscribe } from "@svar-ui/lib-vue";
+
 const props = defineProps({
 	task: {},
 	type: {},
 });
 
+const api = inject("gantt-store");
+const { inactiveTasks } = api.getReactiveState();
+const $inactiveTasks = subscribe(inactiveTasks);
+
 function segmentStyle(i) {
 	const s = props.task.segments[i];
 	return `left:${s.$x}px;top:0px;width:${s.$w}px;height:100%;`;
-}
-
-function getSegProgress(segmentIndex) {
-	if (!props.task.progress) return 0;
-
-	const progress = (props.task.duration * props.task.progress) / 100;
-	const segments = props.task.segments;
-	let duration = 0,
-		i = 0,
-		result = null;
-	do {
-		const s = segments[i];
-		if (i === segmentIndex) {
-			if (duration > progress) result = 0;
-			else
-				result =
-					Math.min((progress - duration) / s.duration, 1) * 100;
-		}
-		duration += s.duration;
-		i++;
-	} while (result === null && i < segments.length);
-	return result || 0;
 }
 </script>
 
@@ -37,14 +23,19 @@ function getSegProgress(segmentIndex) {
 		<div
 			v-for="(seg, i) in task.segments"
 			:key="i"
-			:class="['wx-segment', 'wx-bar', `wx-${type}`]"
+			:class="[
+				'wx-segment',
+				'wx-bar',
+				`wx-${type}`,
+				{ 'wx-inactive': $inactiveTasks && task.inactive },
+			]"
 			:data-segment="i"
 			:style="segmentStyle(i)"
 		>
 			<div v-if="task.progress" class="wx-progress-wrapper">
 				<div
 					class="wx-progress-percent"
-					:style="`width:${getSegProgress(i)}%`"
+					:style="`width:${getSegmentProgress(task, i)}%`"
 				></div>
 			</div>
 			<div class="wx-content">

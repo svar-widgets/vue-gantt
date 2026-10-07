@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed } from "vue";
-import { getData } from "../data";
+import { subDays } from "date-fns";
+import { getData, resources, assignments } from "../data";
 import { Gantt, version } from "../../src";
 import { Toolbar, registerToolbarItem } from "@svar-ui/vue-toolbar";
 import { Switch, RichSelect, Segmented } from "@svar-ui/vue-core";
@@ -16,11 +17,15 @@ const props = defineProps({
 const data = getData(null, {
 	splitTasks: true,
 	baselines: true,
-	unscheduledTasks: true,
+	constraints: true,
+	deadlines: true,
 });
 
 const size = ref("auto");
 const fit = ref(true);
+const api = ref(null);
+const config = ref("basic");
+const tasks = ref(data.tasks);
 
 const items = computed(() => [
 	{ text: "Page size" },
@@ -91,9 +96,6 @@ const markers = [
 
 const calendar = true;
 
-const api = ref(null);
-const config = ref("basic");
-
 function handleClick({ item }) {
 	const parts = item.id.split("-");
 	if (parts[0] === "export") {
@@ -118,8 +120,65 @@ function exportExcel(visual) {
 							header: "Task name",
 							width: 200,
 						},
+						{
+							id: "deadline",
+							header: "Deadline",
+							width: 110,
+							type: "date",
+						},
+						{
+							id: "constraint_type",
+							header: "Constraint",
+							width: 110,
+							type: "string",
+						},
+						{
+							id: "constraint_date",
+							header: "Constraint date",
+							width: 130,
+							type: "date",
+						},
 					]
-				: null,
+				: [
+						{ id: "id", header: "ID", width: 60 },
+						{ id: "text", header: "Task name", width: 200 },
+						{
+							id: "start",
+							header: "Start",
+							width: 110,
+							type: "date",
+						},
+						{
+							id: "end",
+							header: "End",
+							width: 110,
+							type: "date",
+						},
+						{
+							id: "duration",
+							header: "Duration",
+							width: 80,
+							type: "number",
+						},
+						{
+							id: "deadline",
+							header: "Deadline",
+							width: 110,
+							type: "date",
+						},
+						{
+							id: "constraint_type",
+							header: "Constraint",
+							width: 110,
+							type: "string",
+						},
+						{
+							id: "constraint_date",
+							header: "Constraint date",
+							width: 130,
+							type: "date",
+						},
+					],
 			sheetNames: ["Tasks", "Links"],
 			dateFormat: "yyyy-mmm-dd",
 			visual,
@@ -144,10 +203,33 @@ function exportOthers(format) {
 		},
 	});
 }
+
+function applyConfigTasks(config) {
+	const serialized = api.value.serialize();
+	return serialized.map(t => {
+		if (t.id !== 22) return t;
+		if (config === "advanced") {
+			const copy = { ...t };
+			delete copy.start;
+			return copy;
+		}
+		if (!t.start && t.end && t.duration) {
+			return {
+				...t,
+				start: subDays(t.end, t.duration),
+			};
+		}
+		return t;
+	});
+}
+
 function handleChange({ item, value }) {
 	if (item.id === "size") size.value = value;
 	else if (item.id === "fit") fit.value = value;
-	else if (item.id === "config") config.value = value;
+	else if (item.id === "config") {
+		tasks.value = applyConfigTasks(value);
+		config.value = value;
+	}
 }
 </script>
 
@@ -158,7 +240,7 @@ function handleChange({ item, value }) {
 			v-if="config === 'basic'"
 			ref="api"
 			v-bind="skinSettings"
-			:tasks="data.tasks"
+			:tasks="tasks"
 			:links="data.links"
 			:scales="data.scales"
 		/>
@@ -168,12 +250,16 @@ function handleChange({ item, value }) {
 			:baselines="true"
 			:splitTasks="true"
 			:unscheduledTasks="true"
+			:deadlines="true"
+			:schedule="{ auto: true }"
 			:markers="markers"
 			:calendar="calendar"
 			v-bind="skinSettings"
-			:tasks="data.tasks"
+			:tasks="tasks"
 			:links="data.links"
 			:scales="data.scales"
+			:resources="resources"
+			:assignments="assignments"
 		/>
 	</div>
 </template>

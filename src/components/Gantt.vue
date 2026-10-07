@@ -14,7 +14,6 @@ import { EventBusRouter } from "@svar-ui/lib-state";
 import {
 	DataStore,
 	getDefaultColumns,
-	getDefaultGridWidth,
 	defaultTaskTypes,
 	normalizeZoom,
 } from "@svar-ui/gantt-store";
@@ -51,10 +50,12 @@ const props = defineProps({
 	end: { default: null },
 	lengthUnit: { default: "day" },
 	durationUnit: { default: "day" },
+	inclusiveEnd: { type: Boolean, default: false },
 	cellWidth: { default: 100 },
 	cellHeight: { default: 38 },
 	scaleHeight: { default: 36 },
 	gridWidth: { default: null },
+	subGridWidth: { default: null },
 	displayMode: { default: "all" },
 	readonly: { type: Boolean, default: false },
 	cellBorders: { default: "full" },
@@ -65,6 +66,8 @@ const props = defineProps({
 	init: { type: Function, default: null },
 	autoScale: { type: Boolean, default: true },
 	unscheduledTasks: { type: Boolean, default: false },
+	inactiveTasks: { type: Boolean, default: false },
+	placeholderRow: { type: Boolean, default: false },
 	criticalPath: { default: null },
 	schedule: { default: () => ({ type: "forward" }) },
 	projectStart: { default: null },
@@ -77,6 +80,9 @@ const props = defineProps({
 	slack: { type: Boolean, default: false },
 	groupBy: { default: null },
 	wbs: { type: Boolean, default: false },
+	deadlines: { type: Boolean, default: false },
+	progressLine: { type: [Boolean, Date], default: false },
+	sCurve: { type: [Boolean, Array], default: false },
 });
 
 const attrs = useAttrs();
@@ -95,13 +101,9 @@ provide("wx-i18n", locale);
 // prepare configuration objects
 const { calendar: lCalendar } = locale.getRaw();
 
-// default column set (incl. auto-added resources/wbs columns) drives the
-// default grid width when none is provided by the user
+// default column set (incl. auto-added resources/wbs columns)
 const defaultGridColumns = computed(() =>
 	getDefaultColumns({ resources: !!props.resources, wbs: props.wbs })
-);
-const resolvedGridWidth = computed(() =>
-	props.gridWidth ?? getDefaultGridWidth(defaultGridColumns.value)
 );
 
 const normalizedConfig = computed(() => {
@@ -142,9 +144,7 @@ let lastInRoute = new EventBusRouter((a, b) => {
 firstInRoute.setNext(lastInRoute);
 
 const tableAPI = ref(undefined);
-const ganttWidth = ref(undefined);
-const COMPACT_WIDTH = 650;
-const compactMode = computed(() => ganttWidth.value <= COMPACT_WIDTH);
+const subGridTableAPI = ref(undefined);
 
 // public API
 const getState = dataStore.getState.bind(dataStore);
@@ -158,16 +158,20 @@ const detach = firstInRoute.detach.bind(firstInRoute);
 const getTask = id => dataStore.getTask(id);
 const getResource = id => dataStore.getResource(id);
 const serialize = config => dataStore.serialize(config);
-const getTable = waitRender =>
-	waitRender
-		? new Promise(res => setTimeout(() => res(tableAPI.value), 1))
-		: tableAPI.value;
+const getTable = (waitRender, section = "grid") => {
+	const getTableAPI = () =>
+		section === "subGrid" ? subGridTableAPI.value : tableAPI.value;
+	return waitRender
+		? new Promise(res => setTimeout(() => res(getTableAPI()), 1))
+		: getTableAPI();
+};
 const getHistory = () => dataStore.getHistory();
 const getCalendar = id => dataStore.getCalendar(id);
 const getTaskCalendar = task => dataStore.getTaskCalendar(task);
 const getResourceCalendar = resource => dataStore.getResourceCalendar(resource);
 const getTaskResources = id => dataStore.getTaskResources(id);
 const getResourceTasks = id => dataStore.getResourceTasks(id);
+const getLinkValidator = () => dataStore.getLinkValidator();
 
 const api = {
 	getState,
@@ -187,6 +191,8 @@ const api = {
 	getTaskResources,
 	getResourceTasks,
 	getTaskCalendar,
+	getResourceCalendar,
+	getLinkValidator,
 };
 
 defineExpose({
@@ -208,6 +214,7 @@ defineExpose({
 	getResourceTasks,
 	getTaskCalendar,
 	getResourceCalendar,
+	getLinkValidator,
 });
 
 // common API available in components
@@ -215,12 +222,15 @@ provide("gantt-store", {
 	getReactiveState: dataStore.getReactive.bind(dataStore),
 	getState: dataStore.getState.bind(dataStore),
 	exec: firstInRoute.exec.bind(firstInRoute),
+	on: firstInRoute.on.bind(firstInRoute),
+	detach: firstInRoute.detach.bind(firstInRoute),
 	getTask: dataStore.getTask.bind(dataStore),
 	getTaskCalendar: dataStore.getTaskCalendar.bind(dataStore),
 	getResourceCalendar: dataStore.getResourceCalendar.bind(dataStore),
 	getCalendar: dataStore.getCalendar.bind(dataStore),
 	getTaskResources: dataStore.getTaskResources.bind(dataStore),
 	getHistory: dataStore.getHistory.bind(dataStore),
+	getLinkValidator: dataStore.getLinkValidator.bind(dataStore),
 });
 
 let init_once = true;
@@ -247,8 +257,11 @@ const reinitStore = () => {
 		rollups: props.rollups === true ? { type: "closest" } : props.rollups,
 		autoScale: props.autoScale,
 		unscheduledTasks: props.unscheduledTasks,
+		inactiveTasks: props.inactiveTasks,
+		placeholderRow: props.placeholderRow && !props.readonly,
 		markers: props.markers,
 		durationUnit: props.durationUnit,
+		inclusiveEnd: props.inclusiveEnd,
 		criticalPath: props.criticalPath,
 		schedule: props.schedule,
 		projectStart: props.projectStart,
@@ -259,14 +272,19 @@ const reinitStore = () => {
 		undo: props.undo,
 		_weekStart: lCalendar.weekStart,
 		splitTasks: props.splitTasks,
+		deadlines: props.deadlines,
 		summary: props.summary,
 		groupBy: props.groupBy,
 		highlightTime: props.highlightTime,
 		wbs: props.wbs,
-		displayMode: props.displayMode,
-		gridWidth: resolvedGridWidth.value,
+		progressLine: props.progressLine,
 		cellBorders: props.cellBorders,
-		_compactMode: compactMode.value,
+		sCurve: props.sCurve,
+		displayMode: props.displayMode,
+		...(props.gridWidth != null ? { gridWidth: props.gridWidth } : {}),
+		...(props.subGridWidth != null
+			? { subGridWidth: props.subGridWidth }
+			: {}),
 	});
 
 	if (init_once && props.init) {
@@ -284,6 +302,6 @@ watchEffect(reinitStore);
 		:taskTemplate="props.taskTemplate"
 		:readonly="props.readonly"
 		v-model:tableAPI="tableAPI"
-		v-model:ganttWidth="ganttWidth"
+		v-model:subGridTableAPI="subGridTableAPI"
 	/>
 </template>

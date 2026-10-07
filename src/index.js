@@ -6,6 +6,7 @@ import ContextMenu from "./components/ContextMenu.vue";
 import Editor from "./components/Editor.vue";
 import HeaderMenu from "./components/grid/HeaderMenu.vue";
 import ResourceLoad from "./components/resource/ResourceLoad.vue";
+import ConflictReport from "./components/conflicts/ConflictReport.vue";
 
 import Tooltip from "./widgets/Tooltip.vue";
 
@@ -29,6 +30,8 @@ export {
 
 export { registerEditorItem } from "@svar-ui/vue-editor";
 
+export { locateTask } from "./helpers/dnd.js";
+
 const version = pkg.version;
 
 export {
@@ -39,6 +42,7 @@ export {
 	Tooltip,
 	Editor,
 	ResourceLoad,
+	ConflictReport,
 	Willow,
 	WillowDark,
 	version,

@@ -28,7 +28,7 @@ const disabled = computed(() => {
 
 <template>
 	<div
-		v-if="cell || icon"
+		v-if="!row.$placeholder && (cell || icon)"
 		:style="{ textAlign: column.align }"
 	>
 		<i

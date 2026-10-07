@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from "vue";
+import { ref, computed } from "vue";
 import { getData } from "../data";
 import { Gantt, ContextMenu, Toolbar, Editor } from "../../src/";
 import { Segmented, Locale } from "@svar-ui/vue-core";
@@ -18,13 +18,13 @@ const langs = [
 ];
 const lang = ref("en");
 
-const settings = {
+const settings = computed(() => ({
 	...props.skinSettings,
 	tasks: data.tasks,
 	links: data.links,
 	scales: data.scales,
 	zoom: true,
-};
+}));
 </script>
 
 <template>

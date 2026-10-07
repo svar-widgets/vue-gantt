@@ -12,26 +12,16 @@ const props = defineProps({
 	api: {},
 	autoSave: {},
 	onextchange: { type: Function },
-	predecessors: { default: null },
-	successors: { default: null },
 	batch: { default: "links" },
+	edits: { default: null },
 });
 
-const {
-	activeTask,
-	_activeTask,
-	links,
-	tasks,
-	schedule,
-	unscheduledTasks,
-} = props.api.getReactiveState();
+const { activeTask, links, tasks, schedule } = props.api.getReactiveState();
 
 const $activeTask = subscribe(activeTask);
-const $_activeTask = subscribe(_activeTask);
 const $links = subscribe(links, true);
 const $tasks = subscribe(tasks);
 const $schedule = subscribe(schedule);
-const $unscheduledTasks = subscribe(unscheduledTasks);
 
 const linksData = ref();
 
@@ -46,15 +36,35 @@ const list = [
 	{ id: "s2e", label: _("Start-to-end") },
 ];
 
-function lagEditorHandler(row) {
-	return row.type === "e2s"
-		? { type: "text", config: { type: "number" } }
-		: null;
+function getTypeOptions(row) {
+	const link = $links.value.byId(row.id);
+	if (!link) return list;
+	const taken = getPairTypes(link, row.id);
+	const check = props.api.getLinkValidator();
+	return list.filter(
+		({ id: type }) =>
+			type === row.type ||
+			(!taken.has(type) && !check({ ...link, type }))
+	);
 }
 
-const isLagHidden = computed(
-	() => !$schedule.value?.auto || ($unscheduledTasks.value && $_activeTask.value.unscheduled)
-);
+function getPairTypes(link, except) {
+	const out = new Set();
+	linksData.value.forEach(group =>
+		group.data.forEach(row => {
+			if (row.id === except) return;
+			const other = $links.value.byId(row.id);
+			if (
+				other?.source === link.source &&
+				other.target === link.target
+			)
+				out.add(row.type);
+		})
+	);
+	return out;
+}
+
+const isLagHidden = computed(() => !$schedule.value?.auto);
 
 function getColumns() {
 	return [
@@ -66,7 +76,7 @@ function getColumns() {
 		{
 			id: "lag",
 			header: _("Lag"),
-			editor: lagEditorHandler,
+			editor: { type: "text", config: { type: "number" } },
 			flexgrow: 1,
 			hidden: isLagHidden.value,
 		},
@@ -75,12 +85,13 @@ function getColumns() {
 			header: _("Type"),
 			width: 124,
 			options: list,
-			editor: {
+			editor: row => ({
 				type: "richselect",
 				config: {
 					cell: LinkTypeCell,
+					options: getTypeOptions(row),
 				},
-			},
+			}),
 			cell: LinkTypeCell,
 		},
 		{
@@ -94,57 +105,32 @@ function getColumns() {
 }
 
 function getLinksData() {
-	if ($activeTask.value) {
-		const il = [];
-		const ol = [];
-
-		if (!props.predecessors || !props.successors) {
-			$links.value.forEach(l => {
-				if (!props.predecessors && l.target === $activeTask.value) il.push(l);
-				if (!props.successors && l.source === $activeTask.value) ol.push(l);
-			});
-		}
-
-		const inLinks =
-			props.predecessors ||
-			il.map(link => {
-				const { id, lag, type, source } = link;
-				return {
-					id,
-					type,
-					lag,
-					taskText: $tasks.value.byId(source).text,
-				};
-			});
-
-		const outLinks =
-			props.successors ||
-			ol.map(link => {
-				const { id, lag, type, target } = link;
-				return {
-					id,
-					type,
-					lag,
-					taskText: $tasks.value.byId(target).text,
-				};
-			});
-
-		return [
-			{ title: _("Predecessors"), data: inLinks },
-			{ title: _("Successors"), data: outLinks },
-		];
-	}
+	if (!$activeTask.value) return;
+	const inLinks = [];
+	const outLinks = [];
+	const toRow = (link, other) => ({
+		id: link.id,
+		type: link.type,
+		lag: link.lag,
+		taskText: $tasks.value.byId(other).text,
+	});
+	$links.value.forEach(saved => {
+		const edit = props.edits?.get(saved.id);
+		if (edit?.action === "delete-link") return;
+		const link = edit ? { ...saved, ...edit.data.link } : saved;
+		if (link.target === $activeTask.value)
+			inLinks.push(toRow(link, link.source));
+		if (link.source === $activeTask.value)
+			outLinks.push(toRow(link, link.target));
+	});
+	return [
+		{ title: _("Predecessors"), data: inLinks },
+		{ title: _("Successors"), data: outLinks },
+	];
 }
 
 function getActionData(evData) {
-	return {
-		view: "links",
-		event: evData,
-		values: {
-			predecessors: linksData.value[0].data,
-			successors: linksData.value[1].data,
-		},
-	};
+	return { view: "links", event: evData };
 }
 
 function onDeleteAction(id) {
@@ -169,9 +155,6 @@ function onEdit(id, column, value) {
 	if (column === "lag" && value !== "") value = value * 1;
 
 	const update = { [column]: value };
-	if (column === "type" && $schedule.value?.auto) {
-		if (value !== "e2s") update.lag = "";
-	}
 
 	if (props.autoSave) {
 		props.api.exec("update-link", {

@@ -81,7 +81,6 @@ const columns = computed(() => {
 				</Field>
 			</div>
 		</div>
-
 		<div class="gtcell">
 			<ContextMenu :api="api">
 				<Gantt
@@ -98,7 +97,6 @@ const columns = computed(() => {
 			<Editor :api="api" />
 		</div>
 	</div>
-	<Editor :api="api" />
 </template>
 
 <style scoped>
@@ -125,8 +123,8 @@ const columns = computed(() => {
 	border-top: var(--wx-gantt-border);
 }
 
-.demo :deep(.wx-field) {
-	display: flex;
+.select :deep(.wx-field),
+.switch :deep(.wx-field) {
 	align-items: center !important;
 }
 

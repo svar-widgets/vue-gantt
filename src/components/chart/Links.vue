@@ -1,7 +1,7 @@
 <script setup>
 defineOptions({ name: "GanttChartLinks" });
 
-import { inject } from "vue";
+import { inject, computed } from "vue";
 import { clickOutside, setID } from "@svar-ui/lib-dom";
 import { subscribe, asDirective } from "@svar-ui/lib-vue";
 
@@ -15,9 +15,16 @@ const props = defineProps({
 
 const api = inject("gantt-store");
 
-const { _visibleLinks: links, criticalPath } = api.getReactiveState();
+const {
+	_visibleLinks: links,
+	criticalPath,
+	_conflicts,
+} = api.getReactiveState();
 const $links = subscribe(links);
 const $criticalPath = subscribe(criticalPath);
+const $_conflicts = subscribe(_conflicts);
+
+const violated = computed(() => $_conflicts.value?.links);
 
 function onClickOutside(event) {
 	const css = event?.target?.classList;
@@ -36,6 +43,7 @@ function onClickOutside(event) {
 				'wx-line',
 				{
 					'wx-critical': $criticalPath && link.critical,
+					'wx-violated': violated?.has(link.id),
 					'wx-line-selectable': !readonly,
 				},
 			]"
@@ -49,6 +57,7 @@ function onClickOutside(event) {
 			v-if="!readonly && selectedLink"
 			v-click-outside="onClickOutside"
 			class="wx-line wx-line-selected wx-line-selectable wx-delete-link"
+			:class="{ 'wx-violated': violated?.has(selectedLink.id) }"
 			:data-link-id="setID(selectedLink.id)"
 		>
 			<polyline class="wx-line-draw" :points="selectedLink.$p" />
@@ -92,6 +101,11 @@ function onClickOutside(event) {
 	stroke: var(--wx-gantt-link-critical-color-hovered);
 }
 
+.wx-line-selectable.wx-violated:hover > .wx-line-draw {
+	stroke: var(--wx-gantt-link-violation-color);
+	opacity: 0.85;
+}
+
 .wx-line-selectable {
 	cursor: pointer;
 }
@@ -102,5 +116,15 @@ function onClickOutside(event) {
 
 .wx-critical > .wx-line-draw {
 	stroke: var(--wx-gantt-link-critical-color);
+}
+
+.wx-violated > .wx-line-draw {
+	stroke: var(--wx-gantt-link-violation-color);
+	stroke-dasharray: 5 5;
+}
+
+.wx-line.wx-line-selected.wx-violated > .wx-line-draw {
+	stroke: var(--wx-color-danger);
+	stroke-dasharray: none;
 }
 </style>
