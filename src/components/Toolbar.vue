@@ -105,14 +105,19 @@ const buttons = computed(() => {
 			});
 		}
 	});
-	// filter out consecutive separators
+	// hide by handler, then drop redundant separators
+	const isItemHidden = button => {
+		if (!props.api || !button.isHidden) return false;
+		const state = props.api.getState();
+		if (!$_selected?.length) return button.isHidden(null, state);
+		return $_selected.some(task => button.isHidden(task, state));
+	};
 	return finalButtons.filter((button, index) => {
-		if (props.api && button.isHidden)
-			return !$_selected.some(task =>
-				button.isHidden(task, props.api.getState())
-			);
+		if (isItemHidden(button)) return false;
 		if (button.comp === "separator") {
-			const nextButton = finalButtons[index + 1];
+			const nextButton = finalButtons
+				.slice(index + 1)
+				.find(item => !isItemHidden(item));
 			if (!nextButton || nextButton.comp === "separator") return false;
 		}
 		return true;

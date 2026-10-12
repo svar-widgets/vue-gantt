@@ -1,6 +1,7 @@
 <script setup>
 defineOptions({ name: "DemoIndex" });
 import { ref, computed, provide, onMounted, watch, watchEffect } from "vue";
+import { Text } from "@svar-ui/vue-core";
 
 import Router from "./Router.vue";
 import Link from "./Link.vue";
@@ -36,6 +37,26 @@ const MOBILE_BREAKPOINT = 767;
 const isMobileView = computed(() => windowWidth.value <= MOBILE_BREAKPOINT);
 
 const links = getLinks();
+const search = ref("");
+
+const filteredLinks = computed(() => {
+	const query = search.value.trim().toLowerCase();
+	if (!query) return links;
+
+	const result = [];
+	let group = null;
+	links.forEach(data => {
+		if (!Array.isArray(data)) group = data;
+		else if (data[1].toLowerCase().includes(query)) {
+			if (group) {
+				result.push(group);
+				group = null;
+			}
+			result.push(data);
+		}
+	});
+	return result;
+});
 
 provide("wx-theme", "");
 
@@ -65,39 +86,49 @@ watchEffect(() => {
 	<div class="layout" :class="{ active: show, narrow: isMobileView }">
 		<div class="sidebar" :class="{ active: show }" role="tabpanel">
 			<div class="sidebar-content">
-				<div class="sidebar-header">
-					<div class="box-title">
-						<a
-							href="https://svar.dev/vue/"
-							target="_blank"
-							rel="noopener noreferrer"
-						>
-							<img
-								:src="LogoIcon"
-								alt="Logo icon"
-								class="box-title-img"
+				<div class="sidebar-top">
+					<div class="sidebar-header">
+						<div class="box-title">
+							<a
+								href="https://svar.dev/vue/"
+								target="_blank"
+								rel="noopener noreferrer"
+							>
+								<img
+									:src="LogoIcon"
+									alt="Logo icon"
+									class="box-title-img"
+								/>
+							</a>
+							<div class="separator"></div>
+							<a
+								:href="`https://svar.dev/vue/${productLink||productTag}/`"
+								target="_blank"
+								rel="noopener noreferrer"
+							>
+								<h1 class="title">Vue {{ publicName }}</h1>
+							</a>
+						</div>
+						<div class="btn-box">
+							<Button
+								type="secondary"
+								icon="wxi-angle-left"
+								css="toggle-btn"
+								:onclick="toggleSidebar"
 							/>
-						</a>
-						<div class="separator"></div>
-						<a
-							:href="`https://svar.dev/vue/${productLink||productTag}/`"
-							target="_blank"
-							rel="noopener noreferrer"
-						>
-							<h1 class="title">Vue {{ publicName }}</h1>
-						</a>
+						</div>
 					</div>
-					<div class="btn-box">
-						<Button
-							type="secondary"
-							icon="wxi-angle-left"
-							css="toggle-btn"
-							:onclick="toggleSidebar"
+					<div class="box-search">
+						<Text
+							v-model:value="search"
+							placeholder="Search demos"
+							icon="wxi-search"
+							clear
 						/>
 					</div>
 				</div>
 				<div class="box-links">
-					<template v-for="(data, i) in links" :key="Array.isArray(data) ? data[0] : `group-${i}`">
+					<template v-for="data in filteredLinks" :key="Array.isArray(data) ? data[0] : `group-${data.group}`">
 						<Link
 							v-if="Array.isArray(data)"
 							:data="data"
@@ -341,14 +372,19 @@ watchEffect(() => {
 	transition: none;
 }
 
+.sidebar-top {
+	position: sticky;
+	top: 0px;
+	z-index: 1;
+	padding-bottom: 12px;
+	background-color: var(--demo-bg);
+}
+
 .sidebar-header {
 	height: 60px;
 	display: flex;
 	justify-content: space-between;
-	position: sticky;
-	top: 0px;
 	padding: 14px 16px 14px 18px;
-	background-color: var(--demo-bg);
 }
 
 .box-title {
@@ -503,6 +539,11 @@ a {
 .content :deep(.demo-toolbar) {
 	border: 2px solid var(--wx-background-alt);
 	max-width: 600px;
+}
+
+.box-search {
+	padding: 0 16px;
+	--wx-input-width: 100%;
 }
 
 .box-links {
