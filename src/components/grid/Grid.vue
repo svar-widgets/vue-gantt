@@ -209,10 +209,24 @@ function startReorder({ id }) {
 		if (task.$group || task.data) return false;
 	}
 
-	if (api.getTask(id).open) api.exec("open-task", { id, mode: false });
+	// a branch is dragged as one row and reopened on drop
+	if (api.getTask(id).open) {
+		collapsedId = id;
+		api.exec("open-task", { id, mode: false });
+	}
 
 	dragTask.value = tasks.value.find(t => t.id === id);
-	if (!dragTask.value) return false;
+	if (!dragTask.value) {
+		reopenDragged();
+		return false;
+	}
+}
+
+let collapsedId = null;
+function reopenDragged() {
+	if (collapsedId === null) return;
+	api.exec("open-task", { id: collapsedId, mode: true });
+	collapsedId = null;
 }
 
 function endReorder({ id, top }) {
@@ -226,6 +240,7 @@ function endReorder({ id, top }) {
 			inProgress: false,
 		});
 	}
+	reopenDragged();
 	dragTask.value = null;
 }
 

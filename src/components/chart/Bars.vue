@@ -157,7 +157,9 @@ function canScheduleTask(task) {
 	return (
 		_unscheduledTasks.value &&
 		task.unscheduled &&
-		(task.type === "task" || task.type === "milestone") &&
+		(task.type === "task" ||
+			task.type === "milestone" ||
+			(task.type === "summary" && _schedule.value?.auto && task.manual)) &&
 		!task.$group
 	);
 }
@@ -486,8 +488,8 @@ function up() {
 					...dates,
 					text: _("New task"),
 					type: "task",
-					eventSource: "placeholder",
 				},
+				eventSource: "placeholder",
 			});
 		} else api.exec("update-task", { id: task.id, task: dates });
 

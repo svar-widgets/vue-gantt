@@ -66,8 +66,8 @@ function up(ev) {
 	end(widthAt(ev));
 }
 
-// unmounted mid-drag: still commit, so the store drops its drag snapshot
 onUnmounted(() => {
+	// unmounted mid-drag: still commit, so the store drops its drag snapshot
 	if (width != null) end(width);
 	else stop();
 });

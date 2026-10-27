@@ -267,6 +267,7 @@ data.links.push({
 						:tasks="tasks"
 						:links="data.links"
 						:scales="data.scales"
+						:summary="{ autoConvert: true }"
 						:calendar="calendar"
 						:calendars="calendarsList"
 						:resources="resources"

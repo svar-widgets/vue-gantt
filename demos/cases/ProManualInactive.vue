@@ -53,6 +53,7 @@ columns.splice(
 				:scales="data.scales"
 				:schedule="{ auto: true }"
 				inactiveTasks
+				unscheduledTasks
 				:columns="columns"
 			/>
 		</ContextMenu>
