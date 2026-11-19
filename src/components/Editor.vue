@@ -477,7 +477,7 @@ function onTabChange(ev) {
 			:onsave="handleSave"
 			:onvalidation="handleValidation"
 			:onchange="handleChange"
-			:hotkeys="hotkeys && { ...defaultHotkeys, ...hotkeys }"
+			:hotkeys="hotkeys ? { ...defaultHotkeys, ...hotkeys } : false"
 		/>
 	</Locale>
 </template>

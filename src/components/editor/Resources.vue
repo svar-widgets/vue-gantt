@@ -149,7 +149,6 @@ const columns = computed(() => {
 			id: "resource",
 			header: _("Resource"),
 			cell: ResourcesEditorCell,
-			type: "string",
 			flexgrow: 3,
 			editor: row => {
 				return {

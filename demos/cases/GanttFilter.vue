@@ -39,7 +39,7 @@ function reload() {
 <template>
 	<div class="demo">
 		<div class="bar">
-			<Field label="Filter by Task name" class="field">
+			<Field label="Filter by Task name">
 				<Text
 					clear
 					icon="wxi-search"
@@ -47,7 +47,7 @@ function reload() {
 					:onchange="filterTasks"
 				/>
 			</Field>
-			<Field label="Open tasks while filtering" class="field">
+			<Field label="Open tasks while filtering">
 				<Switch v-model:value="open" />
 			</Field>
 			<div class="reload-btn">

@@ -41,6 +41,22 @@ export declare function locateTask(
 	api?: IApi
 ): ILocatedTask | null;
 
+export type IInnerApi = Pick<
+	IApi,
+	| "getReactiveState"
+	| "getState"
+	| "exec"
+	| "on"
+	| "detach"
+	| "getTask"
+	| "getTaskCalendar"
+	| "getResourceCalendar"
+	| "getCalendar"
+	| "getTaskResources"
+	| "getHistory"
+	| "getLinkValidator"
+>;
+
 export interface IColumnConfig extends Omit<IGanttColumn, "header"> {
 	cell?: ITableColumn["cell"];
 	header?: ITableColumn["header"];
@@ -52,7 +68,7 @@ export declare const Gantt: VueComponent<
 		columns?: false | IColumnConfig[];
 		taskTemplate?: VueComponent<{
 			data: ITask;
-			api: IApi;
+			api: IInnerApi;
 			onaction: (ev: {
 				action: string;
 				data: { [key: string]: any };
@@ -60,7 +76,10 @@ export declare const Gantt: VueComponent<
 		}>;
 		readonly?: boolean;
 		cellBorders?: "column" | "full";
-		highlightTime?: (date: Date, unit: "day" | "hour") => string;
+		highlightTime?: (
+			date: Date,
+			unit: NonNullable<IConfig["lengthUnit"]>
+		) => string;
 		init?: (api: IApi) => void;
 	} & Omit<IConfig, "columns"> &
 		GanttActions<TMethodsConfig>
